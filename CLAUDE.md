@@ -33,7 +33,6 @@
 - 유료 키·계정·결제 단계는 건너뛰고 `REPORT.md`에 남긴다.
 - 파일은 프로젝트 안에서만. 임시 파일은 `tmp/`(git 제외). 원본 데이터 `data/raw/`(git 제외), 가공 `data/processed/`.
 - 커밋 메시지는 마일스톤 번호로 시작 (`M2: ...`). 마일스톤마다 테스트 통과 후 커밋·푸시.
-- 진행 기록은 ag-bridge `projects/gyeol/CURRENT_TASK.md`에도 append (자매 통신용 로그).
 
 ## 명령
 - `make setup` — Python(uv)·웹(npm) 의존성

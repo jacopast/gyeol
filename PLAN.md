@@ -32,7 +32,7 @@ web/public/data/regions.json  지역 목록 → 웹은 지역을 고를 수 있�
 ## M0 리포 골격
 - [x] SPEC.md, CLAUDE.md, PLAN.md, DECISIONS.md, HYPOTHESES.md, METRICS.md(목차), config/params.yaml
 - [x] uv(Python 3.12) + ruff + pytest, web npm 골격 + tsc + vitest, Makefile(`lint`, `test`)
-- [x] GitHub `jacopast/gyeol`(public), ag-bridge `projects/gyeol/` 진행 로그
+- [x] GitHub `jacopast/gyeol`(public)
 
 ## M1 데이터 파이프라인
 - 어댑터 계약 + nyc 어댑터: NYC Open Data(Socrata) 레이어를 맨해튼+버퍼 bbox로 받아 자르기
