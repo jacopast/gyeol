@@ -60,3 +60,9 @@
 - [M8] PLACES는 셀 중심 트랙트 → 권역 땅 면적 가중. CSV 라벨은 sample_id 또는 좌표(150 m 안 가장 가까운 표본)로 붙이고 `csv_` 접두어. 쌍대 비교는 승률(`pairwise_`), 상대 보정 없음.
 - [M9] 두 번째 지역 서울 성동구(`config/regions/seongdong.yaml`)를 osm_global 어댑터만으로 시연 — 인구는 GHSL 100 m, 일자리·소득·라벨 없음. 지역 전체에 일자리 데이터가 없으면 주간 기반 지표(`os_g2sfca_day`, `ctx_daytime_ratio`)는 0이 아니라 데이터 없음.
 - [M9] 배포: GitHub Actions → Pages(테스트 통과 후 빌드). Vite base `/gyeol/`(빌드·미리보기).
+
+## 2026-10-10 1차 빌드 후 사용자 결정
+- (사용자) 기본 렌즈 그대로 — α 1.0, β 0.25, 가우시안, 광장·놀이터 포함.
+- (사용자) 성격 모드 k = 7 (표본 1개짜리 유형 포함) 유지.
+- (사용자) 코드 라이선스, H1(마블링) 실증 범위는 나중에.
+- (사용자) jacopast.github.io 링크 허브 Personal에 "결" 추가.
