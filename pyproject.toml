@@ -19,6 +19,7 @@ dependencies = [
   "requests",
   "pyarrow",
   "rasterio",
+  "mapclassify",
 ]
 
 [dependency-groups]

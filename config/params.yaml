@@ -19,6 +19,7 @@ walk:
 
 grid:
   h3_resolution: 10
+  max_node_snap_m: 250       # 셀 중심에서 이보다 먼 곳에만 보행 노드가 있으면 그 셀은 보행망 밖 (M1 데이터 정제, 결과 보기 전)
 
 raster:
   resolution_m: 5            # 공공/사적 분류 래스터
@@ -28,6 +29,12 @@ open_space:
   # 공간 정의 (4부). 화면 토글 = 이 세 가지. 기본 = with_plaza_playground
   definitions: [green_only, with_plaza_playground, with_pops]
   default_definition: with_plaza_playground
+  # 정의별 포함 규칙 (access: free=조건 없음, conditional=시간·운영 조건, restricted=닫힘)
+  #  green_only            : access=free, kind in green_kinds, green_ratio >= green_only_min_green_ratio
+  #  with_plaza_playground : access=free 전부 + 시간제 개방 운동장(kind=schoolyard, conditional)
+  #  with_pops             : 위 + POPS(kind=pops)
+  # 임시 공간(Open Streets)은 어떤 정의에도 넣지 않고 지도 레이어로만 (기본 꺼짐)
+  green_kinds: [park, garden, greenway, waterfront, nature]
   green_only_min_green_ratio: 0.5   # green_only 정의에 들어갈 최소 녹지 비율
   min_area_m2: 400           # 이보다 작은 조각은 공간으로 세지 않음 (os_cover 포함)
   entrance:
@@ -55,9 +62,19 @@ access:
   cover_minutes: [5, 10]
   demand: [night, day]       # night = 2020 센서스 인구, day = LODES 일자리(WAC)
 
+greenness:
+  # 녹지성: Sentinel-2 L2A NDVI (전 세계 공통, 키 없음). LiDAR 토지피복(무거움) 대신 — DECISIONS.md
+  ndvi_threshold: 0.3        # 이 값 이상 = 식생 픽셀
+  season_months: [6, 7, 8]  # 북반구 여름. 남반구 지역은 지역 설정에서 덮어씀
+  year: 2025
+  max_cloud_pct: 10
+
 grain:
   # 혼재도: 공공(1)-사적(3) 이웃 쌍의 비율. 차량(2)은 따로 보고 (9.3)
   neighborhood: 4            # 4-이웃 인접
+  # 정규화: 관측된 공공-사적 이웃 쌍 비율 / 무작위 섞임일 때 기대 비율 2p(1-p). 1 = 무작위, 0 = 완전 분리
+  coarsen_tie: top_left      # 저해상도 최빈값 동점이면 블록 왼쪽 위 픽셀의 클래스 (어느 쪽에도 유리하지 않게)
+  patch_connectivity: 4      # largest_public_patch: 열린 공간(보도 제외) 연결 요소, 4-이웃 (가로가 끊음)
   include_pops_as_public: false   # with_pops 정의에서만 true로 다시 계산
 
 streets:

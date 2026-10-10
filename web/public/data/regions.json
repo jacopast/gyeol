@@ -1,0 +1,11 @@
+[
+ {
+  "id": "manhattan",
+  "name": "맨해튼",
+  "name_en": "Manhattan, New York City",
+  "center": [
+   -73.97719031118277,
+   40.780977496125075
+  ]
+ }
+]
