@@ -1,6 +1,6 @@
 # 시나리오 실험실 결과 (M3)
 
-run `run-002` · params_hash `da5bd895d072` · 원자료 `reports/scenarios_run-002.csv` (1280행)
+run `run-002` · params_hash `70d0f7bff3d8` · 원자료 `reports/scenarios_run-002.csv` (1280행)
 
 추상 격자 도시에서 **총 공공공간 면적을 고정**하고 배치만 바꾼 결과다. 결론을 내리지 않는다 — 어떤 조건에서 어떤 배치의 값이 큰지, 그리고 그것이 **뒤집히는 경계**만 적는다. 가설과 반증 조건은 `HYPOTHESES.md`(실행 전 고정).
 

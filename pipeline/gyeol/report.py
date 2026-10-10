@@ -75,8 +75,10 @@ def render_layers(region_id: str, img_dir) -> list:
     spaces = gpd.read_parquet(proc / "spaces.parquet")
     L = proc / "layers"
     for name, col in (("pop_night", "pop_night"), ("pop_day", "pop_day")):
-        fig, ax = plt.subplots(figsize=(6, 12), dpi=120)
         v = cells[col] / (cells["land_m2"] / 1e4)
+        if not v.notna().any():
+            continue   # 데이터 없음
+        fig, ax = plt.subplots(figsize=(6, 12), dpi=120)
         cells.assign(v=v).plot(column="v", ax=ax, cmap="Greys", scheme="quantiles", k=6, linewidth=0)
         ax.set_axis_off()
         ax.set_title(f"{name} per ha (quantiles)", fontsize=8, color=FG)

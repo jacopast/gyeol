@@ -8,7 +8,7 @@ setup:
 	cd web && npm install
 
 lint:
-	uv run ruff check pipeline tests
+	uv run ruff check pipeline tests templates
 	cd web && npx tsc --noEmit
 
 test:

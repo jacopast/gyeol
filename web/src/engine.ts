@@ -283,7 +283,7 @@ export function aggregate(idx: number[], cells: Cells, poiRows: number[][], lens
     const h = entropy(lu.map(sum));
     out.ctx_landuse_mix = h === null ? null : h / Math.log(lu.length);
   } else out.ctx_landuse_mix = null;
-  out.ctx_daytime_ratio = div(sum('pop_day'), sum('pop_night'));
+  out.ctx_daytime_ratio = hasData(cells, 'pop_day') ? div(sum('pop_day'), sum('pop_night')) : null;
   const inc = cells.col('income');
   if (inc) {
     let a = 0, b = 0;
@@ -298,6 +298,15 @@ export function aggregate(idx: number[], cells: Cells, poiRows: number[][], lens
     out[col] = div(a, b);
   }
   return out;
+}
+
+const hasDataCache = new WeakMap<Cells, Map<string, boolean>>();
+/** 지역 전체에 그 열의 값이 하나라도 있는가 (없으면 그 데이터에 기대는 지표는 데이터 없음). */
+export function hasData(cells: Cells, col: string): boolean {
+  let m = hasDataCache.get(cells);
+  if (!m) { m = new Map(); hasDataCache.set(cells, m); }
+  if (!m.has(col)) { const c = cells.col(col); m.set(col, !!c && c.some((v) => Number.isFinite(v))); }
+  return m.get(col)!;
 }
 
 /** 지도용: 셀 하나짜리 권역으로 각 셀의 지표 값. */

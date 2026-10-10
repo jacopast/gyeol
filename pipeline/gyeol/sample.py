@@ -105,7 +105,8 @@ def aggregate(idx: np.ndarray, cells: pd.DataFrame, cm: pd.DataFrame, poi_rows: 
         out["ctx_landuse_mix"] = None if h is None else h / math.log(len(lu))
     else:
         out["ctx_landuse_mix"] = None
-    out["ctx_daytime_ratio"] = _div(s("pop_day"), s("pop_night"))
+    has_day = "pop_day" in cells.columns and bool(cells["pop_day"].notna().any())   # 지역 전체에 주간 데이터가 있는가
+    out["ctx_daytime_ratio"] = _div(s("pop_day"), s("pop_night")) if has_day else None
     if "income" in c.columns:
         ok = c["income"].notna().to_numpy() & (pop > 0)
         out["ctx_income"] = _div(float((c["income"].to_numpy()[ok] * pop[ok]).sum()), float(pop[ok].sum()))

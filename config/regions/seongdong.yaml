@@ -1,0 +1,12 @@
+# 두 번째 지역 — 전 세계 기본 어댑터(osm_global)만으로 도는지 확인하는 시연
+id: seongdong
+name: 서울 성동구
+name_en: Seongdong-gu, Seoul
+country: KR
+adapter: osm_global
+target:
+  osm_query: "Seongdong-gu, Seoul, South Korea"
+# crs_metric 생략 → 중심점 UTM(52N) 자동
+units_display: metric
+osm_global:
+  population: ghsl          # 야간 인구 = GHSL 100 m. 일자리·소득·건강 라벨은 없음(데이터 없음)

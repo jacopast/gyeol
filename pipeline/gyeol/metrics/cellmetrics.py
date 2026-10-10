@@ -37,6 +37,10 @@ def access_lenses(cells: pd.DataFrame, spaces: pd.DataFrame, D, prm: dict) -> di
                 for alpha in a["alphas"]:
                     out[lens_key("os_gravity", d, decay, alpha, beta)] = gravity(D, S, mask, alpha, beta, decay, a)
                 for dem in a["demand"]:
+                    col = "pop_night" if dem == "night" else "pop_day"
+                    if not cells[col].notna().any():   # 이 지역에 그 수요 데이터가 없다 → 데이터 없음
+                        out[lens_key("os_g2sfca", d, decay, None, beta, dem)] = np.full(len(cells), np.nan)
+                        continue
                     out[lens_key("os_g2sfca", d, decay, None, beta, dem)] = g2sfca(D, S, mask, P[dem], beta, decay, a)
         for m in a["cover_minutes"]:
             out[lens_key(f"os_cover_{m}", d)] = cover(D, S, mask, m * 60 * walk["speed_mps"], prm["open_space"]["min_area_m2"])

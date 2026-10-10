@@ -50,8 +50,8 @@
 
 | 키 | 출처 | 받은 시각 (UTC) |
 | --- | --- | --- |
-| target | NYC Open Data gthc-hcne (shoreline-clipped) | 2026-10-10T15:31:56+00:00 |
-| nyc_boroughs | NYC Open Data gthc-hcne | 2026-10-10T15:31:56+00:00 |
+| target | NYC Open Data gthc-hcne (shoreline-clipped) | 2026-10-10T16:07:08+00:00 |
+| nyc_boroughs | NYC Open Data gthc-hcne | 2026-10-10T16:07:08+00:00 |
 | nyc_parks | NYC Open Data enfh-gkve | 2026-10-10T15:30:36+00:00 |
 | nyc_plazas | NYC Open Data k5k6-6jex | 2026-10-10T15:30:36+00:00 |
 | nyc_wpaa | NYC Open Data 388s-pnvc | 2026-10-10T15:30:36+00:00 |
@@ -70,7 +70,7 @@
 | osm_pois | OpenStreetMap via Overpass (osmnx) | 2026-10-10T15:22:59+00:00 |
 | places | PLACES 2025 release, census tract (GIS friendly) | 2026-10-10T15:22:59+00:00 |
 | osm_open_spaces | OpenStreetMap via Overpass (osmnx) | 2026-10-10T15:30:36+00:00 |
-| walk_network | OpenStreetMap via osmnx graph_from_polygon(network_type='walk') | 2026-10-10T15:26:35+00:00 |
+| walk_network | OpenStreetMap via osmnx graph_from_polygon(network_type='walk') | 2026-10-10T15:32:12+00:00 |
 | ndvi | Sentinel-2 L2A via Earth Search STAC (element84) | 2026-10-10T15:30:48+00:00 |
 
 ## 레이어 그림
