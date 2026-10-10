@@ -98,7 +98,7 @@ def export_region(region_id: str) -> None:
     tgt = gpd.read_parquet(dirs["processed"] / "layers" / "target.parquet").to_crs("EPSG:4326")
     b = tgt.total_bounds
     meta = {
-        "id": region_id, "name": reg["name"], "name_en": reg.get("name_en"), "crs": str(crs),
+        "id": region_id, "name": reg["name"], "name_en": reg.get("name_en"), "crs": crs.to_string(),
         "bounds": [float(x) for x in b], "center": [float((b[0] + b[2]) / 2), float((b[1] + b[3]) / 2)],
         "units_display": reg.get("units_display", "metric"),
         "run_id": prm["run_id"], "params_hash": params_hash(),

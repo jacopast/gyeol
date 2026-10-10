@@ -67,7 +67,7 @@ def aggregate(idx: np.ndarray, cells: pd.DataFrame, cm: pd.DataFrame, poi_rows: 
         p = f"g_{variant}_{r}_"
         ms.append(interspersion(s(p + "nP"), s(p + "nQ"), s(p + "PP"), s(p + "PQ"), s(p + "QQ")))
     out["interspersion"] = ms[0]
-    out["grain_multiscale"] = ms
+    out["grain_multiscale"] = ms if all(x is not None for x in ms) else None
     out["largest_public_patch"] = float(c[f"patch_{variant}_max_m2"].max()) if len(c) else None
 
     # 가로
