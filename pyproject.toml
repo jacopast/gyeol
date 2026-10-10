@@ -42,3 +42,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pipeline/gyeol"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gyeol"]
