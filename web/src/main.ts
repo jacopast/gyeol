@@ -87,6 +87,10 @@ async function start() {
   S.lens = { ...S.defaultLens };
   S.units.width = meta.units_display === 'imperial' ? 'ft' : 'm';
   await loadDemo();
+  try {
+    const r = await fetch(`${BASE}data/regions/${S.region}/personality.json`);
+    if (r.ok) S.personality.model = await r.json();
+  } catch { /* 성격 모드 데이터 없음 */ }
   initMap(meta);
 }
 
@@ -198,7 +202,11 @@ export function setDesignGeo(fc: any) {
 
 // ---------------------------------------------------------------- 패널
 export function allDefs(): MetricDef[] {
-  return [...METRICS, ...labelDefs(S.meta?.label_columns ?? [])];
+  // 불러온 CSV·쌍대 비교 라벨도 비교 차트에 나온다 (지도에는 없음)
+  const extra = new Set<string>();
+  for (const s of S.library) for (const k of Object.keys(s.labels ?? {})) if (k.startsWith('csv_') || k.startsWith('pairwise_')) extra.add(k);
+  const extraDefs = [...extra].sort().map((k) => ({ ...labelDefs([k])[0], label: k, unit: '', map: false }));
+  return [...METRICS, ...labelDefs(S.meta?.label_columns ?? []), ...extraDefs];
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -217,7 +225,7 @@ export function render() {
     h.push(renderLibrarySection());
     h.push(renderCompareSection());
     h.push(renderDesign(S));
-    h.push(renderPersonality(S));
+    h.push(renderPersonality({ personality: S.personality, units: S.units, current: currentTarget() }));
     h.push(renderFooter());
   }
   panel.innerHTML = h.join('');
