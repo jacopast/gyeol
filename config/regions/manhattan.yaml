@@ -1,0 +1,19 @@
+# 지역 설정 — 어떤 도시든 이 형식의 파일 하나로 추가한다.
+# adapter: 레이어별 데이터를 어디서 가져올지. "osm_global"은 전 세계 어디서나 동작하는 기본 어댑터,
+# "nyc"는 뉴욕 공식 공개 데이터로 레이어를 덮어쓰는 어댑터 (없는 레이어는 osm_global로 떨어진다).
+id: manhattan
+name: 맨해튼
+name_en: Manhattan, New York City
+country: US
+adapter: nyc
+# 분석 대상 경계: 어댑터가 정의를 해석한다 (nyc: 보로 코드, osm_global: OSM 행정 경계 질의어)
+target:
+  nyc_borocode: 1
+  osm_query: "Manhattan, New York, USA"
+crs_metric: "EPSG:32618"   # UTM 18N (생략하면 중심점 UTM 자동)
+units_display: imperial    # 폭: ft 기본 + m 토글
+# 이웃 카운티: 버퍼 안의 인구·공간 데이터 (센서스 FIPS)
+nyc:
+  state_fips: "36"
+  county_fips: ["061", "005", "047", "081"]   # 맨해튼 + 버퍼가 닿는 브롱크스·브루클린·퀸스
+  target_county_fips: "061"
