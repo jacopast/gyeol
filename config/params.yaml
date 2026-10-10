@@ -91,6 +91,11 @@ context:
   income_source: acs5_2023_B19013
 
 personality:              # 성격 모드 (9.10)
+  # 지문(프로필)에 넣는 지표 — 평가 지표만. 맥락(ctx_*)·라벨(places_*)·빈 지표(frontage)는 넣지 않는다.
+  # 지표 하나라도 없는(데이터 없음) 표본은 군집에서 빼고 '유형 없음'으로 둔다
+  features: [os_gravity, os_g2sfca_night, os_g2sfca_day, os_cover_5, os_cover_10, os_greenness,
+             nolli_ratio, edge_density, interspersion, largest_public_patch,
+             sidewalk_width, sidewalk_adequacy, lane_share, enclosure, amenity_daily, amenity_diversity]
   standardize: zscore      # zscore | rank
   pca_variance: 0.9        # 누적 설명 분산 이 값까지 성분 유지
   k_min: 3
