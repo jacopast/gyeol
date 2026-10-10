@@ -128,7 +128,7 @@ function initMap(meta: Meta) {
     map.addLayer({ id: 'sample-10', type: 'line', source: 'sample', filter: ['==', ['get', 'm'], 10], paint: { 'line-color': t.fg, 'line-width': 1.6 } });
     map.addLayer({ id: 'sample-5', type: 'line', source: 'sample', filter: ['==', ['get', 'm'], 5], paint: { 'line-color': t.fg, 'line-width': 0.8 } });
     map.addLayer({ id: 'design-boundary', type: 'line', source: 'design', filter: ['==', ['get', 'role'], 'boundary'], paint: { 'line-color': t.fg, 'line-width': 1.6, 'line-dasharray': [3, 2] } });
-    map.addLayer({ id: 'design-line', type: 'line', source: 'design', filter: ['!=', ['get', 'role'], 'boundary'], paint: { 'line-color': t.fg, 'line-width': 0.8, 'line-dasharray': [2, 2] } });
+    map.addLayer({ id: 'design-line', type: 'line', source: 'design', filter: ['!', ['in', ['get', 'role'], ['literal', ['boundary', 'cell', 'entrance']]]], paint: { 'line-color': t.fg, 'line-width': 0.8, 'line-dasharray': [2, 2] } });
     map.addLayer({ id: 'sample-point', type: 'circle', source: 'point', paint: { 'circle-radius': 4, 'circle-color': t.accent } });
     map.on('click', (e: MapMouseEvent) => takeSample(e.lngLat.lng, e.lngLat.lat));
     map.getCanvas().style.cursor = 'crosshair';

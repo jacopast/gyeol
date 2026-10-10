@@ -109,6 +109,13 @@
    ],
    "year": 2025,
    "max_cloud_pct": 10
+  },
+  "region": {
+   "default": "manhattan",
+   "boundary_buffer_m": 1000
+  },
+  "design": {
+   "persons_per_unit": 1.854
   }
  },
  "n_cells": 5581,

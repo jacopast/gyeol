@@ -10,17 +10,19 @@ interface State {
   spaces: any[];
   target: number[];
   base: string;
+  h3: string[];
 }
 let S: State | null = null;
 
 async function load(base: string, region: string) {
   const dir = `${base}data/regions/${region}/`;
-  const [meta, net, cells, pois, spaces] = await Promise.all([
+  const [meta, net, cells, pois, spaces, h3] = await Promise.all([
     fetch(dir + 'meta.json').then((r) => r.json()),
     fetch(dir + 'network.bin').then((r) => r.arrayBuffer()),
     fetch(dir + 'cells.bin').then((r) => r.arrayBuffer()),
     fetch(dir + 'pois.json').then((r) => r.json()),
     fetch(dir + 'spaces.json').then((r) => r.json()),
+    fetch(dir + 'cells_h3.json').then((r) => r.json()),
   ]);
   const m = meta as Meta;
   const c = new Cells(cells, m.columns, m.n_cells);
@@ -28,7 +30,7 @@ async function load(base: string, region: string) {
   const node = c.col('node')!;
   const target: number[] = [];
   for (let i = 0; i < m.n_cells; i++) if (it[i] > 0 && node[i] >= 0) target.push(i);
-  S = { meta: m, net: new Network(net, m.network.n_nodes, m.network.n_entries), cells: c, poiRows: pois.rows, spaces, target, base };
+  S = { meta: m, net: new Network(net, m.network.n_nodes, m.network.n_entries), cells: c, poiRows: pois.rows, spaces, target, base, h3 };
   return { meta: m, target };
 }
 

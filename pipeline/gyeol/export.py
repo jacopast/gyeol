@@ -102,7 +102,8 @@ def export_region(region_id: str) -> None:
         "bounds": [float(x) for x in b], "center": [float((b[0] + b[2]) / 2), float((b[1] + b[3]) / 2)],
         "units_display": reg.get("units_display", "metric"),
         "run_id": prm["run_id"], "params_hash": params_hash(),
-        "params": {k: prm[k] for k in ("walk", "access", "open_space", "raster", "streets", "grain", "greenness")},
+        "params": {**{k: prm[k] for k in ("walk", "access", "open_space", "raster", "streets", "grain", "greenness", "region")},
+                   "design": {"persons_per_unit": _persons_per_unit(dirs)}},
         "n_cells": len(cells), "columns": [c for c, _ in cols],
         "network": {"n_nodes": int(net.n), "n_entries": int(len(net.indices))},
         "lu_columns": [c for c in cells.columns if c.startswith("lu_")],
@@ -111,6 +112,18 @@ def export_region(region_id: str) -> None:
     }
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
     _update_region_index()
+
+
+def _persons_per_unit(dirs) -> float | None:
+    """설계안 units → 인구: 대상 지역 센서스 블록의 인구 / 주택 수 (데이터에서, 문헌값 아님). 없으면 None."""
+    raw = dirs["raw"] / "census_blocks.parquet"
+    if not raw.exists():
+        return None
+    b = gpd.read_parquet(raw)
+    tgt = gpd.read_parquet(dirs["processed"] / "layers" / "target.parquet").to_crs(b.crs)
+    b = b[b.representative_point().within(tgt.geometry.iloc[0])]
+    h = float(b["HOUSING20"].sum())
+    return round(float(b["POP20"].sum()) / h, 3) if h > 0 else None
 
 
 def _missing_layers(dirs) -> list[str]:
