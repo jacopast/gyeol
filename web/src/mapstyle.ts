@@ -57,5 +57,9 @@ export function repaint(map: MLMap, t: Tokens): void {
   set('spaces-line', 'line-color', t.muted);
   for (const id of ['sample-10', 'sample-5', 'design-line', 'design-boundary']) set(id, 'line-color', t.fg);
   set('library-line', 'line-color', t.muted);
-  set('sample-point', 'circle-color', t.accent);
+  set('sample-point', 'circle-color', t.fg);
+  set('sample-point', 'circle-stroke-color', t.bg);
+  set('spaces-name', 'text-color', t.muted);
+  set('spaces-name', 'text-halo-color', t.bg);
+  set('nearest-line', 'line-color', t.fg);
 }

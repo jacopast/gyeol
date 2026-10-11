@@ -46,8 +46,8 @@
 
 | 키 | 출처 | 받은 시각 (UTC) |
 | --- | --- | --- |
-| target | OSM Nominatim | 2026-10-10T16:07:46+00:00 |
-| osm_water | OpenStreetMap via Overpass (osmnx) | 2026-10-10T16:07:46+00:00 |
+| target | OSM Nominatim | 2026-10-11T05:57:51+00:00 |
+| osm_water | OpenStreetMap via Overpass (osmnx) | 2026-10-11T05:57:51+00:00 |
 | osm_open_spaces | OpenStreetMap via Overpass (osmnx) | 2026-10-10T16:03:35+00:00 |
 | osm_streets | OpenStreetMap via Overpass (osmnx) | 2026-10-10T16:03:48+00:00 |
 | osm_buildings | OpenStreetMap via Overpass (osmnx) | 2026-10-10T16:04:03+00:00 |

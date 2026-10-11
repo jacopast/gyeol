@@ -179,3 +179,24 @@ def test_aggregate_additive_stats():
     assert out["ctx_income"] == pytest.approx(50000)
     assert out["frontage_permeability"] is None
     assert a["default_alpha"] == 1.0
+
+
+def test_near_space_minutes_by_size_band():
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    from gyeol.metrics.cellmetrics import near_space_minutes
+    prm = params()
+    net = _toy_network()                       # 0 - 1 - 2 - 3, 100 m 간격
+    cells = pd.DataFrame({"node": [0, 1, 2, 3]})
+    spaces = gpd.GeoDataFrame({
+        "area_m2": [500.0, 20000.0], "entrances": [[1], [3]],
+        "def_green_only": [True, True], "def_with_plaza_playground": [True, True], "def_with_pops": [True, True],
+    }, geometry=[Point(0, 0), Point(0, 0)])
+    out = near_space_minutes(cells, spaces, net, prm)
+    speed = prm["walk"]["speed_mps"]
+    small = out["near|with_plaza_playground|400"]
+    big = out["near|with_plaza_playground|10000"]
+    assert small == pytest.approx(np.array([100, 0, 100, 0]) / speed / 60)   # 가까운 쪽 아무 공간
+    assert big == pytest.approx(np.array([300, 200, 100, 0]) / speed / 60)   # 1 ha 이상은 노드 3에만
+    assert np.all(out["near|with_plaza_playground|100000"] == prm["access"]["near_cutoff_minutes"])

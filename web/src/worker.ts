@@ -42,7 +42,35 @@ function sample(lon: number, lat: number, lens: Lens, minutes: number[]) {
     const idx = walkshedCells(s.net, s.cells.col('node')!, start, mins, s.meta.params.walk.speed_mps);
     out[mins] = { cells: idx, metrics: aggregate(idx, s.cells, s.poiRows, lens, s.meta) };
   }
-  return { start, point: [s.net.lon[start], s.net.lat[start]], results: out };
+  return { start, point: [s.net.lon[start], s.net.lat[start]], results: out, near: nearSpaces(start, lens) };
+}
+
+/** 클릭한 지점에서 크기 구간별 가장 가까운 공간 + 5·10분 안 공간 수·면적 (현재 공간 정의). */
+function nearSpaces(start: number, lens: Lens) {
+  const s = S!;
+  const a = s.meta.params.access;
+  const speed: number = s.meta.params.walk.speed_mps;
+  const cut: number = a.near_cutoff_minutes ?? 30;
+  const d = s.net.dijkstra([start], cut * 60 * speed);
+  const bands: number[] = a.near_size_bands_m2 ?? [400, 10000, 100000];
+  const best = bands.map(() => ({ j: -1, d: Infinity }));
+  const within: Record<number, { n: number; area: number; ids: string[] }> = { 5: { n: 0, area: 0, ids: [] }, 10: { n: 0, area: 0, ids: [] } };
+  s.spaces.forEach((sp: any, j: number) => {
+    if (!sp.defs.includes(lens.definition)) return;
+    let m = Infinity;
+    for (const e of sp.entrances) if (d[e] < m) m = d[e];
+    if (!Number.isFinite(m)) return;
+    bands.forEach((b, k) => { if (sp.area_m2 >= b && m < best[k].d) best[k] = { j, d: m }; });
+    for (const mins of [5, 10]) if (m <= mins * 60 * speed) { within[mins].n++; within[mins].area += sp.area_m2; within[mins].ids.push(sp.id); }
+  });
+  return {
+    cutoff: cut,
+    bands: bands.map((b, k) => {
+      const sp = best[k].j >= 0 ? s.spaces[best[k].j] : null;
+      return { band: b, id: sp?.id ?? null, name: sp?.name ?? null, kind: sp?.kind ?? null, area_m2: sp?.area_m2 ?? null, minutes: sp ? best[k].d / speed / 60 : null };
+    }),
+    within,
+  };
 }
 
 self.onmessage = async (ev: MessageEvent) => {

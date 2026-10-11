@@ -24,7 +24,7 @@ export function stripChart(def: MetricDef, pts: { v: number | null; name: string
   const dots = pts.filter((p) => typeof p.v === 'number' && Number.isFinite(p.v))
     .map((p) => `<circle cx="${x(p.v as number)}%" cy="13" r="3.2" fill="var(--fg)" fill-opacity="0.45"><title>${esc(p.name)}: ${fmtValue(def, p.v, u)}</title></circle>`).join('');
   const line = target !== null && Number.isFinite(target)
-    ? `<line x1="${x(target)}%" x2="${x(target)}%" y1="1" y2="25" stroke="var(--accent)" stroke-width="2" ${dashed ? 'stroke-dasharray="3 2"' : ''}><title>${fmtValue(def, target, u)}</title></line>` : '';
+    ? `<line x1="${x(target)}%" x2="${x(target)}%" y1="1" y2="25" stroke="var(--fg)" stroke-width="2.5" ${dashed ? 'stroke-dasharray="3 2"' : ''}><title>${fmtValue(def, target, u)}</title></line>` : '';
   // 현재 대상의 위치: 표본 중 몇 개가 더 작은가 (순위만, 평가 아님)
   const rank = target !== null && vals.length ? ` · 표본 ${vals.length}개 중 ${vals.filter((v) => v < target).length}개가 더 작음` : '';
   return `<div class="strip"><div class="lbl"><span>${esc(def.label)}</span><span class="muted">${target !== null ? fmtValue(def, target, u) : ''}${rank}</span></div>

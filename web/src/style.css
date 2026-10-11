@@ -8,8 +8,8 @@
   --cell-bg: #f4f3ef;
   --border-strong: #33322f;
   --water: #dfded8;
-  /* 강조색 하나 (DECISIONS.md): 종이 톤과 어울리는 탁한 적갈색 — 현재 대상(선)에만 */
-  --accent: #9a5b3f;
+  /* 강조색 하나 (DECISIONS.md): 종이 톤과 어울리는 탁한 초록 — 공공공간(공원·광장)에만 */
+  --accent: #74876a;
   --panel-w: 360px;
 }
 @media (prefers-color-scheme: dark) {
@@ -21,7 +21,7 @@
     --cell-bg: #343538;
     --border-strong: #d9d7d1;
     --water: #26272a;
-    --accent: #c98a6a;
+    --accent: #8fa384;
   }
 }
 
@@ -112,3 +112,16 @@ input[type='file'] { display: none; }
 
 .maplibregl-ctrl-attrib { font-family: var(--font-main); font-size: 11px; background: transparent !important; }
 .maplibregl-ctrl-attrib a { color: var(--muted) !important; }
+
+.lead { font-size: 15px; margin: 6px 0; }
+.lead b { font-weight: 700; }
+.swatch { display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 0; vertical-align: -1px; }
+.keys { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; color: var(--muted); margin-top: 4px; }
+.lab-grid { display: grid; grid-template-columns: 74px repeat(4, 1fr); gap: 4px 6px; margin: 8px 0; align-items: end; font-size: 12px; }
+.lab-label { font-size: 12px; color: var(--muted); line-height: 1.25; }
+.lab-cell { font-variant-numeric: tabular-nums; }
+.lab-grid figure { margin: 0; font-size: 12px; text-align: center; }
+.lab-grid canvas { width: 100%; aspect-ratio: 1; display: block; border: 1px solid var(--line); }
+.lab-grid .top { font-weight: 700; color: var(--fg); }
+.lab-cell:not(.top) { color: var(--muted); }
+.bar { height: 6px; background: var(--fg); opacity: 0.55; margin-top: 2px; }

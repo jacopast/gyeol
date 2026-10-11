@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -319,6 +320,36 @@ def run_all() -> None:
     run = prm["run_id"]
     df.to_csv(out_dir / f"scenarios_{run}.csv", index=False)
     write_report(df, prm, out_dir, fig_dir)
+    export_web(df, prm)
+
+
+def export_web(df: pd.DataFrame, prm: dict) -> None:
+    """웹 '실험' 칸용: 배치 그림 4장 + 조건별 값 (가우시안 감쇠, 혼잡 없음/있음)."""
+    from PIL import Image
+
+    from .config import WEB_DATA
+    out = WEB_DATA / "scenarios"
+    out.mkdir(parents=True, exist_ok=True)
+    cache = df.attrs["cache"]
+    for name, g in cache.items():
+        c = g["_cls"]
+        # 값 = 클래스 코드 (웹이 테마 색으로 칠함)
+        Image.fromarray(c.astype(np.uint8), mode="L").save(out / f"{name}.png", optimize=True)
+    sel = df[df.decay == "gaussian"]
+    rows = []
+    for _, r in sel.iterrows():
+        rows.append({k: (bool(r[k]) if k in ("congestion", "opportunity_cost", "barrier") else
+                         r[k] if k == "layout" else float(r[k]))
+                     for k in ("layout", "alpha", "beta", "congestion", "opportunity_cost", "barrier",
+                               "access_mean", "access_p10", "os_cover_5", "proxy_restoration", "proxy_social")})
+    first = df.drop_duplicates("layout").set_index("layout")
+    layouts = {n: {"n_spaces": int(first.loc[n, "n_spaces"]), "total_ha": float(first.loc[n, "total_area_m2"]) / 1e4,
+                   "largest_patch_ha": float(first.loc[n, "largest_public_patch"]) / 1e4,
+                   "edge_density": float(first.loc[n, "edge_density"])} for n in cache}
+    (out / "scenarios.json").write_text(json.dumps({
+        "run_id": prm["run_id"], "params_hash": params_hash(), "layouts": layouts, "rows": rows,
+        "city": {k: prm["scenarios"][k] for k in ("city_size_blocks", "block_m", "street_m", "density_per_ha", "open_space_share")},
+    }, ensure_ascii=False, separators=(",", ":")))
 
 
 def _grid_table(w: pd.DataFrame, fixed: dict, value: str = "winner") -> list[str]:

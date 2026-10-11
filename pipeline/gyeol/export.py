@@ -87,7 +87,10 @@ def export_region(region_id: str) -> None:
             "pt": [round(rp.iloc[i].x, 6), round(rp.iloc[i].y, 6)],
         })
     (out / "spaces.json").write_text(json.dumps(sp_rows, ensure_ascii=False, separators=(",", ":")))
-    gj = spaces[["id", "kind", "access", "geometry"]].copy()
+    gj = spaces[["id", "name", "kind", "access", "area_m2", "geometry"]].copy()
+    gj["name"] = gj["name"].where(gj["name"].notna(), None)
+    gj["free"] = spaces["def_with_plaza_playground"].astype(int).values
+    gj["area_m2"] = gj["area_m2"].round(0)
     pts = gj.geom_type == "Point"
     gj.loc[pts, "geometry"] = spaces.loc[pts].apply(lambda r: r.geometry.buffer(np.sqrt(r["area_m2"] / np.pi)), axis=1)
     gj["geometry"] = gj.geometry.simplify(1.5)
@@ -110,8 +113,40 @@ def export_region(region_id: str) -> None:
         "label_columns": [c for c in cells.columns if c.startswith("places_")],
         "missing_layers": _missing_layers(dirs),
     }
+    meta["ground"] = export_ground_png(dirs, out)
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
     _update_region_index()
+
+
+def export_ground_png(dirs, out) -> dict | None:
+    """지상층 분류 래스터를 웹 메르카토르로 다시 투영해 PNG 하나로 (값 = 클래스 코드 0~6).
+    웹이 테마 색으로 다시 칠한다. 한 변 4096 픽셀 이하."""
+    src_path = dirs["processed"] / "class5m.npy"
+    if not src_path.exists():
+        return None
+    from PIL import Image
+    from rasterio.transform import array_bounds
+    from rasterio.warp import Resampling, calculate_default_transform, reproject
+
+    from .build import ground_grid
+    cls = np.load(src_path)
+    grid, crs = ground_grid(dirs)
+    west, south, east, north = array_bounds(grid.height, grid.width, grid.transform)
+    tr, w, h = calculate_default_transform(crs, "EPSG:3857", grid.width, grid.height, west, south, east, north)
+    scale = max(w, h) / 4096
+    if scale > 1:
+        tr, w, h = calculate_default_transform(crs, "EPSG:3857", grid.width, grid.height, west, south, east, north,
+                                               dst_width=int(w / scale), dst_height=int(h / scale))
+    dst = np.zeros((h, w), np.uint8)
+    reproject(cls, dst, src_transform=grid.transform, src_crs=crs, dst_transform=tr, dst_crs="EPSG:3857",
+              resampling=Resampling.mode, src_nodata=0, dst_nodata=0)
+    Image.fromarray(dst, mode="L").save(out / "ground.png", optimize=True)
+    wl, sb, el, nb = array_bounds(h, w, tr)
+    to = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
+    lon0, lat0 = to.transform(wl, sb)
+    lon1, lat1 = to.transform(el, nb)
+    return {"file": "ground.png", "bounds": [lon0, lat0, lon1, lat1], "size": [int(w), int(h)],
+            "classes": {"1": "open_free", "2": "roadway", "3": "private", "4": "sidewalk", "5": "open_cond", "6": "pops"}}
 
 
 def _persons_per_unit(dirs) -> float | None:

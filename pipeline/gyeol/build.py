@@ -103,6 +103,17 @@ def build_all(region_id: str, force: bool = False) -> None:
     _log(f"done params_hash={params_hash()}")
 
 
+def ground_grid(dirs):
+    """build_all과 같은 래스터 격자를 다시 만든다 (내보내기용)."""
+    from .layers import metric_crs
+    prm = params()
+    L = dirs["processed"] / "layers"
+    study = gpd.read_parquet(L / "study.parquet")
+    target = gpd.read_parquet(L / "target.parquet")
+    crs = study.crs.to_string() if study.crs else metric_crs({}, target)
+    return make_grid(study.total_bounds, prm["raster"]["resolution_m"], max(prm["raster"]["multiscale_m"])), crs
+
+
 def prepare_spaces(spaces: gpd.GeoDataFrame, net: Network, grid, green: np.ndarray, prm: dict) -> gpd.GeoDataFrame:
     from rasterio import features
     os_cfg = prm["open_space"]

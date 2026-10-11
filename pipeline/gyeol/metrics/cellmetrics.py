@@ -47,6 +47,28 @@ def access_lenses(cells: pd.DataFrame, spaces: pd.DataFrame, D, prm: dict) -> di
     return out
 
 
+def near_space_minutes(cells, spaces, net, prm) -> dict[str, np.ndarray]:
+    """정의·크기 구간별 가장 가까운 공간(출입구)까지 보행 분. cutoff 밖은 cutoff."""
+    a = prm["access"]
+    cut = a["near_cutoff_minutes"]
+    speed = prm["walk"]["speed_mps"]
+    node = cells["node"].to_numpy()
+    S = spaces["area_m2"].to_numpy(float)
+    out = {}
+    for d in DEFS:
+        mask = spaces[f"def_{d}"].to_numpy(bool)
+        for band in a["near_size_bands_m2"]:
+            sel = np.where(mask & (S >= band))[0]
+            key = f"near|{d}|{int(band)}"
+            if not len(sel):
+                out[key] = np.full(len(cells), float(cut))
+                continue
+            src = np.unique(np.concatenate([np.asarray(spaces["entrances"].iloc[j], dtype=np.int64) for j in sel]))
+            dist = net.dist_at(src, cut * 60 * speed, node)
+            out[key] = np.minimum(dist / speed / 60, cut)
+    return out
+
+
 def daily_amenity_times(cells, pois: gpd.GeoDataFrame | None, net, prm) -> dict[str, np.ndarray]:
     """일상 필수 시설 범주별 가장 가까운 곳까지 보행 분. 한계 밖은 cutoff 값."""
     am = prm["amenity"]
@@ -91,7 +113,8 @@ def compute_cell_metrics(cells, spaces, D, net, L, prm) -> pd.DataFrame:
     lenses = access_lenses(cells, spaces, D, prm)
     pois = gpd.read_parquet(L / "pois.parquet") if (L / "pois.parquet").exists() else None
     t = daily_amenity_times(cells, pois, net, prm)
-    df = pd.DataFrame({**lenses, **{f"amen_{k}": v for k, v in t.items()}})
+    near = near_space_minutes(cells, spaces, net, prm)
+    df = pd.DataFrame({**lenses, **{f"amen_{k}": v for k, v in t.items()}, **near})
     df.loc[cells["node"].to_numpy() < 0, :] = np.nan   # 보행망 밖 셀: 데이터 없음
     df.insert(0, "h3", cells["h3"].values)
     return df

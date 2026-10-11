@@ -60,6 +60,10 @@ access:
   step_outer_m: 800
   step_mid: 0.5
   cover_minutes: [5, 10]
+  # 화면용 직관 지표 (2026-10-11 추가, 가설 판정과 무관): 크기별 '가장 가까운 공공공간까지 걸어서 몇 분'
+  # 작은 것도 큰 것도 같은 방식으로 — 가까운 작은 공원과 먼 큰 공원을 나란히 보여 준다 (대칭성)
+  near_size_bands_m2: [400, 10000, 100000]   # 아무 공간 / 1 ha 이상 / 10 ha 이상
+  near_cutoff_minutes: 30
   demand: [night, day]       # night = 2020 센서스 인구, day = LODES 일자리(WAC)
 
 greenness:

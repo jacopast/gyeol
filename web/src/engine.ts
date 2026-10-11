@@ -17,6 +17,7 @@ export interface Meta {
   lu_columns: string[];
   label_columns: string[];
   missing_layers: string[];
+  ground?: { file: string; bounds: [number, number, number, number]; size: [number, number] };
 }
 
 export interface Lens {
@@ -312,6 +313,12 @@ export function hasData(cells: Cells, col: string): boolean {
 /** 지도용: 셀 하나짜리 권역으로 각 셀의 지표 값. */
 export function cellValues(metric: string, cells: Cells, poiRows: number[][], lens: Lens, meta: Meta, targetIdx: number[]): Float64Array {
   const out = new Float64Array(cells.n).fill(NaN);
+  // 'near_<면적>': 셀에서 그 크기 이상 공간까지 보행 분 (미리 계산한 열)
+  if (metric.startsWith('near_')) {
+    const c = cells.col(`near|${lens.definition}|${metric.slice(5)}`);
+    if (c) for (const i of targetIdx) out[i] = c[i];
+    return out;
+  }
   for (const i of targetIdx) {
     const v = aggregate([i], cells, poiRows, lens, meta)[metric];
     out[i] = typeof v === 'number' ? v : NaN;

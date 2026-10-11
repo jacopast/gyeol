@@ -4,7 +4,9 @@ import { M_PER_FT } from './units';
 export interface MetricDef {
   id: string;
   label: string;
-  group: '공공공간' | '결' | '가로' | '근접성' | '맥락' | '라벨';
+  group: '공원까지 걸어서' | '공공공간' | '결' | '가로' | '근접성' | '맥락' | '라벨';
+  breaks?: number[]; // 고정 단계 (없으면 분위수)
+  hint?: string;      // 한 줄 풀이
   unit: string;
   fmt: (v: number, u: Units) => string;
   map?: boolean; // 단계 구분도로 그릴 수 있는가
@@ -18,8 +20,18 @@ const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
 const width = (v: number, u: Units) => (u.width === 'ft' ? `${(v / M_PER_FT).toFixed(1)} ft` : `${v.toFixed(1)} m`);
 const ha = (v: number) => `${(v / 1e4).toFixed(2)} ha`;
 
+const mins = (v: number) => (v >= 30 ? '30분+' : `${v.toFixed(v < 10 ? 1 : 0)}분`);
+const MIN_BREAKS = [2.5, 5, 7.5, 10, 15];
+
+/** 지도 전용 지표: 셀에서 공간까지 보행 분 (표본 표에는 문장으로 따로 나온다). */
+export const NEAR_METRICS: MetricDef[] = [
+  { id: 'near_400', label: '가장 가까운 공원·광장', group: '공원까지 걸어서', unit: '분', fmt: mins, map: true, breaks: MIN_BREAKS, hint: '크기와 상관없이 가장 가까운 공공공간까지' },
+  { id: 'near_10000', label: '1 ha 이상 공원·광장', group: '공원까지 걸어서', unit: '분', fmt: mins, map: true, breaks: MIN_BREAKS, hint: '축구장 1.5개 크기 이상' },
+  { id: 'near_100000', label: '10 ha 이상 큰 공원·광장', group: '공원까지 걸어서', unit: '분', fmt: mins, map: true, breaks: [5, 10, 15, 20, 25], hint: '센트럴파크 같은 큰 공원' },
+];
+
 export const METRICS: MetricDef[] = [
-  { id: 'os_gravity', label: '중력 접근성', group: '공공공간', unit: 'm^2α', fmt: big, map: true },
+  { id: 'os_gravity', label: '공원 접근성 점수 (면적×거리)', group: '공공공간', unit: 'm^2α', fmt: big, map: true },
   { id: 'os_g2sfca_night', label: '1인당 공공공간 (야간 인구)', group: '공공공간', unit: 'm²/인', fmt: n(1), map: true },
   { id: 'os_g2sfca_day', label: '1인당 공공공간 (일자리)', group: '공공공간', unit: 'm²/인', fmt: n(1), map: true },
   { id: 'os_cover_5', label: '5분 안 공공공간 인구 비율', group: '공공공간', unit: '', fmt: pct, map: true },

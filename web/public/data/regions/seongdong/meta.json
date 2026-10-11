@@ -15,7 +15,7 @@
  ],
  "units_display": "metric",
  "run_id": "run-002",
- "params_hash": "70d0f7bff3d8",
+ "params_hash": "79e75c83f940",
  "params": {
   "walk": {
    "speed_mps": 1.2,
@@ -55,6 +55,12 @@
     5,
     10
    ],
+   "near_size_bands_m2": [
+    400,
+    10000,
+    100000
+   ],
+   "near_cutoff_minutes": 30,
    "demand": [
     "night",
     "day"
@@ -319,7 +325,16 @@
   "os_cover_5|with_pops",
   "os_cover_10|with_pops",
   "amen_t_grocery",
-  "amen_t_pharmacy"
+  "amen_t_pharmacy",
+  "near|green_only|400",
+  "near|green_only|10000",
+  "near|green_only|100000",
+  "near|with_plaza_playground|400",
+  "near|with_plaza_playground|10000",
+  "near|with_plaza_playground|100000",
+  "near|with_pops|400",
+  "near|with_pops|10000",
+  "near|with_pops|100000"
  ],
  "network": {
   "n_nodes": 14109,
@@ -351,5 +366,26 @@
   "pop_day",
   "income",
   "labels"
- ]
+ ],
+ "ground": {
+  "file": "ground.png",
+  "bounds": [
+   126.9958884484683,
+   37.519957935608794,
+   127.0861864636815,
+   37.583053131903135
+  ],
+  "size": [
+   1593,
+   1404
+  ],
+  "classes": {
+   "1": "open_free",
+   "2": "roadway",
+   "3": "private",
+   "4": "sidewalk",
+   "5": "open_cond",
+   "6": "pops"
+  }
+ }
 }

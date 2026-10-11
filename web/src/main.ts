@@ -2,14 +2,16 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { cellsToMultiPolygon, cellToBoundary } from 'h3-js';
 import * as maplibregl from 'maplibre-gl';
-import type { GeoJSONSource, MapMouseEvent } from 'maplibre-gl';
+import type { CanvasSource, GeoJSONSource, MapMouseEvent } from 'maplibre-gl';
 import mlWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import type { Lens, Meta, Metrics } from './engine';
 import {
   exportJSON, importJSON, loadLibrary, nextId, parsePeerFilter, passesPeer, type Sample, saveLibrary, splitMetrics,
 } from './library';
 import { baseStyle, readTokens, repaint } from './mapstyle';
-import { fmtValue, labelDefs, type MetricDef, METRICS, type Units } from './metrics';
+import { fmtValue, labelDefs, type MetricDef, METRICS, NEAR_METRICS, type Units } from './metrics';
+import { loadClassImage, paint, palette } from './ground';
+import { paintLab, renderLab, type LabState } from './lab';
 import { quantileBreaks, stripChart } from './charts';
 import { renderDesign, type DesignState } from './designui';
 import { renderPersonality, type PersonalityState } from './personalityui';
@@ -36,7 +38,8 @@ export function rpc<T = any>(op: string, args: any = {}): Promise<T> {
 }
 
 // ---------------------------------------------------------------- 상태
-interface SampleView { point: [number, number]; results: Record<number, { cells: number[]; metrics: Metrics }> }
+interface NearBand { band: number; id: string | null; name: string | null; kind: string | null; area_m2: number | null; minutes: number | null }
+interface SampleView { point: [number, number]; results: Record<number, { cells: number[]; metrics: Metrics }>; near?: { cutoff: number; bands: NearBand[]; within: Record<number, { n: number; area: number; ids: string[] }> } }
 export interface AppState {
   regions: { id: string; name: string; name_en?: string; center: [number, number] }[];
   region: string;
@@ -57,15 +60,17 @@ export interface AppState {
   personality: PersonalityState;
   busy: string;
   notice: string;
+  lab: LabState;
 }
 
 const S: AppState = {
   regions: [], region: '', meta: null, h3: [], target: [],
   lens: { definition: 'with_plaza_playground', decay: 'gaussian', alpha: 1, beta: 0.25 },
   defaultLens: { definition: 'with_plaza_playground', decay: 'gaussian', alpha: 1, beta: 0.25 },
-  metric: 'os_gravity', breaks: [], units: { width: 'ft' }, sample: null, addMinutes: 10,
+  metric: 'near_10000', breaks: [], units: { width: 'ft' }, sample: null, addMinutes: 10,
   library: loadLibrary(), compare: new Set(), peer: '', design: { result: null, errors: [], name: '' },
   personality: { model: null, targetType: null }, busy: '', notice: '',
+  lab: { data: null, alpha: 1, beta: 0.25, congestion: false, opportunity_cost: false, barrier: false },
 };
 
 const panel = document.getElementById('panel')!;
@@ -87,6 +92,10 @@ async function start() {
   S.lens = { ...S.defaultLens };
   S.units.width = meta.units_display === 'imperial' ? 'ft' : 'm';
   await loadDemo();
+  try {
+    const r = await fetch(`${BASE}data/scenarios/scenarios.json`);
+    if (r.ok) S.lab.data = await r.json();
+  } catch { /* 실험 데이터 없음 */ }
   try {
     const r = await fetch(`${BASE}data/regions/${S.region}/personality.json`);
     if (r.ok) S.personality.model = await r.json();
@@ -121,27 +130,50 @@ function initMap(meta: Meta) {
       id: 'cells-fill', type: 'fill', source: 'cells',
       paint: {
         'fill-color': t.fg,
-        'fill-opacity': ['match', ['get', 'c'], 0, 0.04, 1, 0.12, 2, 0.22, 3, 0.34, 4, 0.48, 5, 0.64, 0],
+        'fill-opacity': ['match', ['get', 'c'], 0, 0.03, 1, 0.10, 2, 0.18, 3, 0.27, 4, 0.37, 5, 0.48, 0],
         'fill-antialias': false,
       },
     }, 'place');
+    // 공공공간 바탕(놀리 지도): 공원·광장 초록, 보도 옅은 띠. 셀 색 위에 얹어 늘 보이게
+    if (meta.ground) {
+      groundImg = await loadClassImage(`${BASE}data/regions/${S.region}/${meta.ground.file}`);
+      paint(groundCanvas, groundImg, palette(t));
+      const [w, s_, e, n] = meta.ground.bounds;
+      map.addSource('ground', { type: 'canvas', canvas: groundCanvas, coordinates: [[w, n], [e, n], [e, s_], [w, s_]], animate: false });
+      map.addLayer({ id: 'ground', type: 'raster', source: 'ground', paint: { 'raster-resampling': 'nearest', 'raster-fade-duration': 0 } }, 'place');
+    }
     map.addSource('spaces', { type: 'geojson', data: `${BASE}data/regions/${S.region}/spaces.geojson` });
-    map.addLayer({ id: 'spaces-line', type: 'line', source: 'spaces', minzoom: 13, paint: { 'line-color': t.muted, 'line-width': 0.5 } }, 'place');
+    map.addLayer({ id: 'spaces-line', type: 'line', source: 'spaces', minzoom: 14, filter: ['==', ['get', 'free'], 1], paint: { 'line-color': t.accent, 'line-width': 0.8 } }, 'place');
+    map.addLayer({ id: 'nearest-line', type: 'line', source: 'spaces', filter: ['in', ['get', 'id'], ['literal', []]], paint: { 'line-color': t.fg, 'line-width': 2.2 } });
+    map.addLayer({
+      id: 'spaces-name', type: 'symbol', source: 'spaces', minzoom: 14.5,
+      filter: ['all', ['==', ['get', 'free'], 1], ['has', 'name'], ['>=', ['get', 'area_m2'], 1500]],
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-max-width': 8 },
+      paint: { 'text-color': t.muted, 'text-halo-color': t.bg, 'text-halo-width': 1.2 },
+    });
     for (const id of ['library', 'sample', 'design', 'point']) map.addSource(id, { type: 'geojson', data: empty() });
     map.addLayer({ id: 'library-line', type: 'line', source: 'library', paint: { 'line-color': t.muted, 'line-width': 1 } });
     map.addLayer({ id: 'sample-10', type: 'line', source: 'sample', filter: ['==', ['get', 'm'], 10], paint: { 'line-color': t.fg, 'line-width': 1.6 } });
     map.addLayer({ id: 'sample-5', type: 'line', source: 'sample', filter: ['==', ['get', 'm'], 5], paint: { 'line-color': t.fg, 'line-width': 0.8 } });
     map.addLayer({ id: 'design-boundary', type: 'line', source: 'design', filter: ['==', ['get', 'role'], 'boundary'], paint: { 'line-color': t.fg, 'line-width': 1.6, 'line-dasharray': [3, 2] } });
     map.addLayer({ id: 'design-line', type: 'line', source: 'design', filter: ['!', ['in', ['get', 'role'], ['literal', ['boundary', 'cell', 'entrance']]]], paint: { 'line-color': t.fg, 'line-width': 0.8, 'line-dasharray': [2, 2] } });
-    map.addLayer({ id: 'sample-point', type: 'circle', source: 'point', paint: { 'circle-radius': 4, 'circle-color': t.accent } });
+    map.addLayer({ id: 'sample-point', type: 'circle', source: 'point', paint: { 'circle-radius': 5, 'circle-color': t.fg, 'circle-stroke-color': t.bg, 'circle-stroke-width': 2 } });
     map.on('click', (e: MapMouseEvent) => takeSample(e.lngLat.lng, e.lngLat.lat));
     map.getCanvas().style.cursor = 'crosshair';
     S.busy = '';
     await refreshChoropleth();
     drawLibrary();
   });
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => repaint(map, readTokens()));
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    const tk = readTokens();
+    repaint(map, tk);
+    if (groundImg) { paint(groundCanvas, groundImg, palette(tk)); const src = map.getSource('ground') as CanvasSource | undefined; src?.play(); src?.pause(); }
+    render();
+  });
 }
+
+const groundCanvas = document.createElement('canvas');
+let groundImg: ImageData | null = null;
 
 const empty = () => ({ type: 'FeatureCollection' as const, features: [] as any[] });
 
@@ -152,7 +184,8 @@ async function refreshChoropleth() {
   render();
   const v: Float64Array = await rpc('cellValues', { metric: S.metric, lens: S.lens });
   const vals = S.target.map((i) => v[i]).filter((x) => Number.isFinite(x));
-  S.breaks = quantileBreaks(vals, 6);
+  const def = mapDefs().find((d) => d.id === S.metric);
+  S.breaks = def?.breaks ?? quantileBreaks(vals, 6);
   const cls = (x: number) => {
     if (!Number.isFinite(x)) return -1;
     let k = 0;
@@ -178,7 +211,9 @@ async function takeSample(lon: number, lat: number) {
   S.busy = '권역 계산 중';
   render();
   const r = await rpc('sample', { lon, lat, lens: S.lens, minutes: S.meta.params.walk.sample_minutes });
-  S.sample = { point: r.point, results: r.results };
+  S.sample = { point: r.point, results: r.results, near: r.near };
+  const ids = (r.near?.bands ?? []).map((b: NearBand) => b.id).filter(Boolean);
+  map.setFilter('nearest-line', ['in', ['get', 'id'], ['literal', ids]]);
   const feats = Object.entries(r.results as Record<string, { cells: number[] }>).map(([m, x]) => ({
     type: 'Feature' as const, properties: { m: Number(m) }, geometry: outline(x.cells),
   }));
@@ -201,6 +236,10 @@ export function setDesignGeo(fc: any) {
 }
 
 // ---------------------------------------------------------------- 패널
+function mapDefs(): MetricDef[] {
+  return [...NEAR_METRICS, ...allDefs().filter((d) => d.map)];
+}
+
 export function allDefs(): MetricDef[] {
   // 불러온 CSV·쌍대 비교 라벨도 비교 차트에 나온다 (지도에는 없음)
   const extra = new Set<string>();
@@ -209,6 +248,7 @@ export function allDefs(): MetricDef[] {
   return [...METRICS, ...labelDefs(S.meta?.label_columns ?? []), ...extraDefs];
 }
 
+const KIND: Record<string, string> = { park: '공원', plaza: '광장', playground: '놀이터', garden: '정원', greenway: '녹지대', waterfront: '수변 공간', nature: '자연 지역', schoolyard: '학교 운동장', pops: '사유 공개공지' };
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const lensIsDefault = () => JSON.stringify(S.lens) === JSON.stringify(S.defaultLens);
 
@@ -216,12 +256,14 @@ export function render() {
   const m = S.meta;
   const h: string[] = [];
   h.push(`<section><h1>결</h1>
-    <p class="small">${m ? esc(m.name) : ''}${S.regions.length > 1 ? ' · ' + S.regions.filter((r) => r.id !== S.region).map((r) => `<a href="?r=${r.id}">${esc(r.name)}</a>`).join(' · ') : ''}</p>
-    <p class="small">지도를 누르면 그 자리에서 걸어서 5분·10분 권역의 지표를 보여 줍니다. 무엇이 좋은지는 판단하지 않습니다.</p>
+    <p class="small">${esc(S.regions.find((r) => r.id === S.region)?.name ?? '')}${S.regions.length > 1 ? ' · ' + S.regions.filter((r) => r.id !== S.region).map((r) => `<a href="?r=${r.id}">${esc(r.name)}</a>`).join(' · ') : ''}</p>
+    <p class="lead">초록은 누구나 들어갈 수 있는 공원·광장, 옅은 띠는 보도입니다. 바탕 육각형이 진할수록 공원까지 더 멉니다.</p>
+    <p class="small">지도를 눌러 보세요 — 그 자리에서 걸어서 가장 가까운 공원과 큰 공원까지 몇 분인지 알려 줍니다. 아래 '실험'에서는 같은 면적의 공원을 크게 모을 때와 작게 흩을 때를 비교합니다. 어느 쪽이 좋다고 판단하지는 않습니다.</p>
     ${S.busy ? `<p class="small">${S.busy}…</p>` : ''}${S.notice ? `<p class="small">${esc(S.notice)}</p>` : ''}</section>`);
   if (m) {
-    h.push(renderMapSection());
     h.push(renderSampleSection());
+    h.push(renderMapSection());
+    if (S.lab.data) h.push(renderLab(S.lab));
     h.push(renderLibrarySection());
     h.push(renderCompareSection());
     h.push(renderDesign(S));
@@ -229,23 +271,31 @@ export function render() {
     h.push(renderFooter());
   }
   panel.innerHTML = h.join('');
+  if (S.lab.data) paintLab(panel, S.lab, readTokens());
 }
 
 function renderMapSection(): string {
   const groups = new Map<string, MetricDef[]>();
-  for (const d of allDefs().filter((d) => d.map)) groups.set(d.group, [...(groups.get(d.group) ?? []), d]);
-  const lists = [...groups.entries()].map(([g, ds]) => `<div class="group">${g}</div><div class="list">${ds
-    .map((d) => `<button class="link" data-metric="${d.id}" aria-pressed="${d.id === S.metric}">${esc(d.label)}</button>`).join('')}</div>`).join('');
-  const def = allDefs().find((d) => d.id === S.metric)!;
+  for (const d of mapDefs()) groups.set(d.group, [...(groups.get(d.group) ?? []), d]);
+  const lists = [...groups.entries()].map(([g, ds], gi) => {
+    const body = `<div class="list">${ds.map((d) => `<button class="link" data-metric="${d.id}" aria-pressed="${d.id === S.metric}" title="${esc(d.hint ?? '')}">${esc(d.label)}</button>`).join('')}</div>`;
+    return gi === 0 ? `<div class="group">${g}</div>${body}` : `<details${ds.some((d) => d.id === S.metric) ? ' open' : ''}><summary class="group">${g}</summary>${body}</details>`;
+  }).join('');
+  const def = mapDefs().find((d) => d.id === S.metric)!;
+  const ops = [3, 10, 18, 27, 37, 48];
+  const isNear = S.metric.startsWith('near_');
   const legend = S.breaks.length
-    ? `<div class="legend">${[0, 1, 2, 3, 4, 5].map((k) => `<span style="border-top-color: color-mix(in srgb, var(--fg) ${[4, 12, 22, 34, 48, 64][k]}%, transparent)">${k === 0 ? '' : fmtValue(def, S.breaks[k - 1], S.units)}</span>`).join('')}</div>
-       <p class="small">셀 하나 기준, 대상 지역 분위수 6단계. 칠하지 않은 셀 = 데이터 없음.</p>`
+    ? `<div class="legend">${ops.map((o, k) => `<span style="border-top-color: color-mix(in srgb, var(--fg) ${o}%, transparent)">${k === 0 ? '' : fmtValue(def, S.breaks[k - 1], S.units)}</span>`).join('')}</div>
+       <p class="small">${isNear ? `육각형 하나에서 ${esc(def.label)}까지 걸어서 걸리는 시간. 진할수록 멉니다.` : `육각형 하나 기준 값, 이 지역 안에서 6단계로 나눔(진할수록 큼). ${def.group === '맥락' ? '맥락 변수는 평가 지표가 아닙니다.' : ''}`}</p>`
     : '';
-  return `<section><h2>지도</h2>${lists}${legend}</section>`;
+  const keys = `<div class="keys"><span><i class="swatch" style="background:var(--accent)"></i>공원·광장 (누구나)</span>
+    <span><i class="swatch" style="background:color-mix(in srgb, var(--accent) 45%, transparent)"></i>시간제·사유 공개공지</span>
+    <span><i class="swatch" style="background:color-mix(in srgb, var(--fg) 24%, transparent)"></i>보도</span></div>`;
+  return `<section><h2>지도에 칠할 것</h2>${lists}${legend}${keys}</section>`;
 }
 
 function renderSampleSection(): string {
-  if (!S.sample) return `<section><h2>표본</h2><p class="small">지도를 눌러 표본을 찍으세요. 굵은 선 10분, 가는 선 5분.</p></section>`;
+  if (!S.sample) return `<section><h2>이 자리에서</h2><p class="small">지도를 누르면 여기에 나옵니다.</p></section>`;
   const mins = Object.keys(S.sample.results).map(Number).sort((a, b) => a - b);
   const rows = allDefs().map((d) => {
     const cells = mins.map((mm) => {
@@ -257,10 +307,21 @@ function renderSampleSection(): string {
   }).join('');
   const ms = S.sample.results[mins[mins.length - 1]].metrics.grain_multiscale as number[] | null;
   const [lon, lat] = S.sample.point;
-  return `<section><h2>표본</h2>
-    <p class="small">${lat.toFixed(5)}, ${lon.toFixed(5)} · 셀 ${mins.map((mm) => `${mm}분 ${S.sample!.results[mm].cells.length}개`).join(', ')}</p>
+  const nr = S.sample.near;
+  const bandName = (b: number) => (b >= 100000 ? '10 ha 이상 큰 공원·광장' : b >= 10000 ? '1 ha 이상 공원·광장' : '가장 가까운 공원·광장');
+  const ha = (a: number | null) => (a === null ? '' : a >= 10000 ? `${(a / 10000).toFixed(a >= 100000 ? 0 : 1)} ha` : `${Math.round(a).toLocaleString('ko-KR')} m²`);
+  const lead = nr ? `${nr.bands.map((b, k) => k > 0 && b.id && b.id === nr.bands[k - 1].id
+      ? `<p class="small">${bandName(b.band)}도 같은 곳.</p>`
+      : b.minutes === null
+      ? `<p class="lead">${bandName(b.band)}: 걸어서 ${nr.cutoff}분 안에 없음</p>`
+      : `<p class="lead">${bandName(b.band)}: <b>${esc(b.name ?? KIND[b.kind ?? ''] ?? '이름 없는 공간')}</b> 걸어서 <b>${Math.max(1, Math.round(b.minutes))}분</b> <span class="small">(${ha(b.area_m2)})</span></p>`).join('')}
+    <p class="small">걸어서 5분 안 공공공간 ${nr.within[5].n}곳 (합계 ${ha(nr.within[5].area) || '0'}), 10분 안 ${nr.within[10].n}곳 (합계 ${ha(nr.within[10].area) || '0'}). 지도에 굵은 선으로 표시.</p>` : '';
+  return `<section><h2>이 자리에서</h2>
+    ${lead}
+    <details><summary class="small">자세한 지표 (5분·10분 권역)</summary>
+    <p class="small">${lat.toFixed(5)}, ${lon.toFixed(5)} · 셀 ${mins.map((mm) => `${mm}분 ${S.sample!.results[mm].cells.length}개`).join(', ')} · 지도에 굵은 선 10분, 가는 선 5분</p>
     <table><tr><th>지표</th>${mins.map((mm) => `<th>${mm}분</th>`).join('')}</tr>${rows}
-    <tr><td>다중 스케일 결 (${S.meta!.params.raster.multiscale_m.join('/')} m, ${mins[mins.length - 1]}분)</td><td colspan="${mins.length}">${ms ? ms.map((x) => x.toFixed(2)).join(' / ') : '데이터 없음'}</td></tr></table>
+    <tr><td>다중 스케일 결 (${S.meta!.params.raster.multiscale_m.join('/')} m, ${mins[mins.length - 1]}분)</td><td colspan="${mins.length}">${ms ? ms.map((x) => x.toFixed(2)).join(' / ') : '데이터 없음'}</td></tr></table></details>
     <p style="margin-top:8px"><input type="text" id="sample-name" placeholder="이름 (선택)"></p>
     <p class="row"><span>${mins.map((mm) => `<button class="link" data-addmin="${mm}" aria-pressed="${mm === S.addMinutes}">${mm}분</button>`).join(' · ')}</span>
     <button class="link" id="add-sample">라이브러리에 추가</button></p></section>`;
@@ -335,6 +396,7 @@ panel.addEventListener('click', async (e) => {
   if (!el) return;
   const d = el.dataset;
   if (d.metric) { S.metric = d.metric; await refreshChoropleth(); return; }
+  if (d.lab) { (S.lab as any)[d.lab] = d.lab === 'alpha' || d.lab === 'beta' ? Number(d.val) : d.val === 'true'; render(); return; }
   if (d.addmin) { S.addMinutes = Number(d.addmin); render(); return; }
   if (d.unit) { S.units.width = d.unit as 'ft' | 'm'; render(); return; }
   if (d.lens) {
