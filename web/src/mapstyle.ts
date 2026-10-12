@@ -55,7 +55,9 @@ export function repaint(map: MLMap, t: Tokens): void {
   for (const id of ['place', 'place-minor', 'road-name']) { set(id, 'text-color', t.muted); set(id, 'text-halo-color', t.bg); }
   set('cells-fill', 'fill-color', t.fg);
   set('spaces-line', 'line-color', t.muted);
-  for (const id of ['sample-10', 'sample-5', 'design-line', 'design-boundary']) set(id, 'line-color', t.fg);
+  for (const id of ['sample-10', 'sample-5', 'design-line', 'design-boundary', 'design-walk-after']) set(id, 'line-color', t.fg);
+  set('design-walk-before', 'line-color', t.muted);
+  set('design-walk-start', 'circle-color', t.fg);
   set('library-line', 'line-color', t.muted);
   set('sample-point', 'circle-color', t.fg);
   set('sample-point', 'circle-stroke-color', t.bg);

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { designRecompute, validateDesign } from '../src/design';
-import { Cells, type Meta, Network } from '../src/engine';
+import { aggregate, Cells, type Meta, Network, walkshedCells } from '../src/engine';
 
 const dir = resolve(__dirname, '../public/data/regions/manhattan');
 const buf = (f: string) => { const b = readFileSync(resolve(dir, f)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
@@ -54,6 +54,19 @@ describe('design recompute on the example', () => {
     expect(Math.abs((r.after!.os_gravity as number) / (r.before!.os_gravity as number) - 1)).toBeLessThan(0.01);
     expect(r.after!.lane_share as number).toBeLessThan(r.before!.lane_share as number);
     expect(r.after!.frontage_permeability).toBe(8);
+    // Peer comparisons must use actual network walksheds, never the site polygon.
+    const cmp = r.comparison!;
+    const start = S.net.nearest(...cmp.point);
+    for (const minutes of [5, 10]) {
+      const w = cmp.results[minutes];
+      const expected = walkshedCells(S.net, S.cells.col('node')!, start, minutes, meta.params.walk.speed_mps);
+      expect(w.beforeCells).toEqual(expected);
+      expect(w.afterCells.length).toBeGreaterThan(r.siteCells!);
+      const baseline = aggregate(expected, S.cells, S.poiRows, lens, meta);
+      expect(w.before.nolli_ratio).toBe(baseline.nolli_ratio);
+      expect(Math.abs((w.before.os_gravity as number) / (baseline.os_gravity as number) - 1)).toBeLessThan(0.005);
+      expect(Object.keys(w.after).some((k) => k.startsWith('places_'))).toBe(false);
+    }
     console.log(JSON.stringify({ site: r.siteCells, buf: r.bufferCells, warnings: r.warnings,
       before: { nolli: r.before!.nolli_ratio, grav: r.before!.os_gravity, lane: r.before!.lane_share, sw: r.before!.sidewalk_width },
       after: { nolli: r.after!.nolli_ratio, grav: r.after!.os_gravity, lane: r.after!.lane_share, sw: r.after!.sidewalk_width } }));

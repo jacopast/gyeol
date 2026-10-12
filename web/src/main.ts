@@ -5,6 +5,7 @@ import * as maplibregl from 'maplibre-gl';
 import type { CanvasSource, GeoJSONSource, MapMouseEvent } from 'maplibre-gl';
 import mlWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import type { Lens, Meta, Metrics } from './engine';
+import { comparisonMismatch, sameLens, type ComparisonBasis } from './comparison';
 import {
   exportJSON, importJSON, loadLibrary, nextId, parsePeerFilter, passesPeer, type Sample, saveLibrary, splitMetrics,
 } from './library';
@@ -39,7 +40,7 @@ export function rpc<T = any>(op: string, args: any = {}): Promise<T> {
 
 // ---------------------------------------------------------------- 상태
 interface NearBand { band: number; id: string | null; name: string | null; kind: string | null; area_m2: number | null; minutes: number | null }
-interface SampleView { point: [number, number]; results: Record<number, { cells: number[]; metrics: Metrics }>; near?: { cutoff: number; bands: NearBand[]; within: Record<number, { n: number; area: number; ids: string[] }> } }
+interface SampleView { lens: Lens; point: [number, number]; results: Record<number, { cells: number[]; metrics: Metrics }>; near?: { cutoff: number; bands: NearBand[]; within: Record<number, { n: number; area: number; ids: string[] }> } }
 export interface AppState {
   regions: { id: string; name: string; name_en?: string; center: [number, number] }[];
   region: string;
@@ -151,14 +152,17 @@ function initMap(meta: Meta) {
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-max-width': 8 },
       paint: { 'text-color': t.muted, 'text-halo-color': t.bg, 'text-halo-width': 1.2 },
     });
-    for (const id of ['library', 'sample', 'design', 'point']) map.addSource(id, { type: 'geojson', data: empty() });
+    for (const id of ['library', 'sample', 'design', 'design-walk', 'point']) map.addSource(id, { type: 'geojson', data: empty() });
     map.addLayer({ id: 'library-line', type: 'line', source: 'library', paint: { 'line-color': t.muted, 'line-width': 1 } });
     map.addLayer({ id: 'sample-10', type: 'line', source: 'sample', filter: ['==', ['get', 'm'], 10], paint: { 'line-color': t.fg, 'line-width': 1.6 } });
     map.addLayer({ id: 'sample-5', type: 'line', source: 'sample', filter: ['==', ['get', 'm'], 5], paint: { 'line-color': t.fg, 'line-width': 0.8 } });
+    map.addLayer({ id: 'design-walk-before', type: 'line', source: 'design-walk', filter: ['==', ['get', 'role'], 'before'], paint: { 'line-color': t.muted, 'line-width': 1.2 } });
+    map.addLayer({ id: 'design-walk-after', type: 'line', source: 'design-walk', filter: ['==', ['get', 'role'], 'after'], paint: { 'line-color': t.fg, 'line-width': 1.8, 'line-dasharray': [3, 2] } });
+    map.addLayer({ id: 'design-walk-start', type: 'circle', source: 'design-walk', filter: ['==', ['get', 'role'], 'start'], paint: { 'circle-color': t.fg, 'circle-radius': 4 } });
     map.addLayer({ id: 'design-boundary', type: 'line', source: 'design', filter: ['==', ['get', 'role'], 'boundary'], paint: { 'line-color': t.fg, 'line-width': 1.6, 'line-dasharray': [3, 2] } });
     map.addLayer({ id: 'design-line', type: 'line', source: 'design', filter: ['!', ['in', ['get', 'role'], ['literal', ['boundary', 'cell', 'entrance']]]], paint: { 'line-color': t.fg, 'line-width': 0.8, 'line-dasharray': [2, 2] } });
     map.addLayer({ id: 'sample-point', type: 'circle', source: 'point', paint: { 'circle-radius': 5, 'circle-color': t.fg, 'circle-stroke-color': t.bg, 'circle-stroke-width': 2 } });
-    map.on('click', (e: MapMouseEvent) => takeSample(e.lngLat.lng, e.lngLat.lat));
+    map.on('click', (e: MapMouseEvent) => { if (!S.busy) void takeSample(e.lngLat.lng, e.lngLat.lat); });
     map.getCanvas().style.cursor = 'crosshair';
     S.busy = '';
     await refreshChoropleth();
@@ -206,13 +210,17 @@ function outline(cells: number[]) {
   return { type: 'MultiPolygon' as const, coordinates: mp };
 }
 
-async function takeSample(lon: number, lat: number) {
+let sampleRequest = 0;
+async function takeSample(lon: number, lat: number, navigate = true) {
   if (!S.meta) return;
-  if (mode !== 'city') setMode('city');
+  if (navigate && mode !== 'city') setMode('city');
+  const request = ++sampleRequest;
+  const lens = { ...S.lens };
   S.busy = '권역 계산 중';
   render();
-  const r = await rpc('sample', { lon, lat, lens: S.lens, minutes: S.meta.params.walk.sample_minutes });
-  S.sample = { point: r.point, results: r.results, near: r.near };
+  const r = await rpc('sample', { lon, lat, lens, minutes: S.meta.params.walk.sample_minutes });
+  if (request !== sampleRequest || !sameLens(lens, S.lens)) return;
+  S.sample = { lens, point: r.point, results: r.results, near: r.near };
   const ids = (r.near?.bands ?? []).map((b: NearBand) => b.id).filter(Boolean);
   map.setFilter('nearest-line', ['in', ['get', 'id'], ['literal', ids]]);
   const feats = Object.entries(r.results as Record<string, { cells: number[] }>).map(([m, x]) => ({
@@ -251,7 +259,7 @@ export function allDefs(): MetricDef[] {
 
 const KIND: Record<string, string> = { park: '공원', plaza: '광장', playground: '놀이터', garden: '정원', greenway: '녹지대', waterfront: '수변 공간', nature: '자연 지역', schoolyard: '학교 운동장', pops: '사유 공개공지' };
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const lensIsDefault = () => JSON.stringify(S.lens) === JSON.stringify(S.defaultLens);
+const lensIsDefault = () => sameLens(S.lens, S.defaultLens);
 
 type Mode = 'question' | 'city' | 'design';
 const MODES: [Mode, string, string][] = [
@@ -267,6 +275,7 @@ let mode: Mode = (() => {
 })();
 
 export function render() {
+  document.body.dataset.mode = mode;
   const m = S.meta;
   const h: string[] = [];
   const desc = MODES.find(([k]) => k === mode)![2];
@@ -287,11 +296,25 @@ export function render() {
       h.push(renderDesign(S));
       h.push(renderLibrarySection());
       h.push(renderCompareSection());
-      h.push(renderPersonality({ personality: S.personality, units: S.units, current: currentTarget() }));
+      const demo = S.library.filter((s) => s.demo && s.region === S.region);
+      const basis = comparisonBasis();
+      const compatible = demo.length > 0 && demo.every((s) => !comparisonMismatch(s, basis));
+      h.push(renderPersonality({ personality: S.personality, units: S.units, current: compatible ? currentTarget() : null }));
+      if (S.personality.model && !compatible) h.push('<p class="small">유형 거리는 시연 표본과 같은 10분·기본 렌즈·계산 버전에서만 표시합니다. 현재 조건에서는 유형 프로필만 참고할 수 있습니다.</p>');
     }
     h.push(renderFooter());
   }
   panel.innerHTML = h.join('');
+  const walkSource = map?.getSource('design-walk') as GeoJSONSource | undefined;
+  if (walkSource) {
+    const cmp = mode === 'design' && sameLens(S.design.lens, S.lens) ? S.design.result?.comparison : null;
+    const w = cmp?.results[S.addMinutes];
+    walkSource.setData(w && cmp ? { type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: { role: 'before' }, geometry: outline(w.beforeCells) },
+      { type: 'Feature', properties: { role: 'after' }, geometry: outline(w.afterCells) },
+      { type: 'Feature', properties: { role: 'start' }, geometry: { type: 'Point', coordinates: cmp.point } },
+    ] } : empty());
+  }
   if (S.lab.data && mode === 'question') paintLab(panel, S.lab, readTokens());
 }
 
@@ -301,6 +324,7 @@ function setMode(next: Mode) {
   history.replaceState(null, '', `${location.pathname}${location.search}#${next}`);
   panel.scrollTop = 0;
   render();
+  requestAnimationFrame(() => map?.resize());
 }
 
 function renderMapSection(): string {
@@ -372,37 +396,45 @@ function renderLibrarySection(): string {
     <input type="file" id="lib-file" accept=".json,application/json"><input type="file" id="csv-file" accept=".csv,text/csv"></p></section>`;
 }
 
-/** 비교 대상: 현재 표본 또는 설계안. */
+/** Site totals stay in the before/after table; only walksheds enter peer comparison. */
 export function currentTarget(): { name: string; metrics: Metrics; dashed: boolean } | null {
-  if (S.design.result?.after) return { name: '설계안', metrics: S.design.result.after, dashed: true };
-  if (S.sample) return { name: '현재 표본', metrics: S.sample.results[S.addMinutes]?.metrics ?? {}, dashed: false };
+  if (S.design.result) {
+    if (!sameLens(S.design.lens, S.lens)) return null;
+    const w = S.design.result.comparison?.results[S.addMinutes];
+    return w ? { name: `설계안 ${S.addMinutes}분 보행권`, metrics: w.after, dashed: true } : null;
+  }
+  if (S.sample && sameLens(S.sample.lens, S.lens)) return {
+    name: `현재 표본 ${S.addMinutes}분 보행권`, metrics: S.sample.results[S.addMinutes]?.metrics ?? {}, dashed: false,
+  };
   return null;
 }
 
-function comparisonSet(): Sample[] {
-  const rules = parsePeerFilter(S.peer);
-  return S.library.filter((s) => s.region === S.region && S.compare.has(s.id) && passesPeer(s, rules));
+function comparisonBasis(): ComparisonBasis {
+  return { region: S.region, params_hash: S.meta!.params_hash, walk_minutes: S.addMinutes, lens: S.lens };
 }
 
 function renderCompareSection(): string {
-  const set = comparisonSet();
-  const tgt = currentTarget();
+  const basis = comparisonBasis();
+  const selected = S.library.filter((s) => S.compare.has(s.id));
+  const excluded = selected.filter((s) => comparisonMismatch(s, basis));
   const rules = parsePeerFilter(S.peer);
-  const hashes = new Set(set.map((s) => s.params_hash));
-  const warn = hashes.size > 1 || [...hashes].some((x) => x !== S.meta!.params_hash)
-    ? '<p class="small">경고: 파라미터(params_hash)가 다른 표본이 섞여 있습니다. 같은 정의로 계산된 값이 아닙니다.</p>' : '';
+  const compatible = selected.filter((s) => !comparisonMismatch(s, basis));
+  const set = compatible.filter((s) => passesPeer(s, rules));
+  const tgt = currentTarget();
+  const warning = excluded.length ? `<details><summary class="small">조건이 다른 표본 ${excluded.length}개 제외</summary>${excluded.map((s) =>
+    `<p class="small">${esc(s.name || s.id)}: ${comparisonMismatch(s, basis)}</p>`).join('')}</details>` : '';
   const charts = set.length || tgt
-    ? allDefs().filter((d) => d.group !== '맥락').map((d) => {
+    ? allDefs().filter((d) => d.group !== '맥락' && !(S.design.result && d.group === '라벨')).map((d) => {
       const pts = set.map((s) => ({ v: (s.metrics[d.id] ?? s.labels[d.id] ?? s.context[d.id]) as number | null, name: s.name || s.id }));
-      const tv = (tgt?.metrics[d.id] as number | null | undefined) ?? null;
-      return stripChart(d, pts, tv, S.units, tgt?.dashed ?? false);
-    }).join('')
-    : '';
-  return `<section><h2>비교</h2>
-    <p class="small">점 = 라이브러리에서 체크한 동네들, 굵은 선 = ${tgt ? esc(tgt.name) : '현재 대상(도시 읽기에서 누른 곳 또는 설계안) 없음'}. 지표마다 따로 보여 주고 합친 점수는 만들지 않습니다.</p>
-    <p class="small">비슷한 동네끼리만 비교하기 — 줄마다 <code>지표 최소 최대</code>. 예: <code>ctx_density 100 400</code> = 인구 밀도 100~400 인/ha인 표본만</p>
-    <textarea id="peer" rows="2">${esc(S.peer)}</textarea>
-    <p class="small">${rules.length ? `필터 ${rules.length}개 · ` : ''}비교 표본 ${set.length}개</p>${warn}${charts}</section>`;
+      return stripChart(d, pts, (tgt?.metrics[d.id] as number | null | undefined) ?? null, S.units, tgt?.dashed ?? false);
+    }).join('') : '';
+  return `<section><h2>동네와 같은 조건으로 비교</h2>
+    <p class="list">보행권 ${[5, 10].map((n) => `<button class="link" data-addmin="${n}" aria-pressed="${S.addMinutes === n}">${n}분</button>`).join(' · ')}</p>
+    <p class="small">같은 지역·계산 버전·보행 시간·공간 정의·감쇠·α·β의 표본만 비교합니다. 현재 α ${S.lens.alpha}, β ${S.lens.beta}.</p>
+    <p class="small">점 = 선택한 동네들, 굵은 선 = ${tgt ? esc(tgt.name) : '현재 대상 없음'}. ${S.design.result ? '설계 대상지 안의 값은 위 전후 표에서, 주변 동네와의 비교는 보행권으로 봅니다. 건강 라벨은 설계 성과로 예측하지 않습니다.' : '도시 읽기에서 지점을 누르면 현재 대상이 생깁니다.'}</p>
+    <details id="peer-filter"${S.peer ? ' open' : ''}><summary class="small">비슷한 맥락의 동네로 좁히기</summary><p class="small">줄마다 지표 최소 최대. 예: <code>ctx_density 100 400</code> (인구 밀도 100~400 인/ha)</p>
+    <textarea id="peer" rows="2">${esc(S.peer)}</textarea></details>
+    <p class="small">비교 표본 ${set.length}개 · 맥락 필터로 ${compatible.length - set.length}개 제외</p>${warning}${charts}</section>`;
 }
 
 function renderFooter(): string {
@@ -426,6 +458,7 @@ panel.addEventListener('click', async (e) => {
   if (!el) return;
   const d = el.dataset;
   if (d.mode) { setMode(d.mode as Mode); return; }
+  if (S.busy) return;
   if (d.metric) { S.metric = d.metric; await refreshChoropleth(); return; }
   if (d.lab) { (S.lab as any)[d.lab] = d.lab === 'alpha' || d.lab === 'beta' ? Number(d.val) : d.val === 'true'; render(); return; }
   if (d.addmin) { S.addMinutes = Number(d.addmin); render(); return; }
@@ -433,11 +466,10 @@ panel.addEventListener('click', async (e) => {
   if (d.lens) {
     const key = d.lens as keyof Lens;
     (S.lens as any)[key] = key === 'alpha' || key === 'beta' ? Number(d.val) : d.val;
-    await refreshChoropleth();
-    if (S.sample) await takeSample(S.sample.point[0], S.sample.point[1]);
+    await refreshAnalysis();
     return;
   }
-  if (el.id === 'lens-reset') { S.lens = { ...S.defaultLens }; await refreshChoropleth(); return; }
+  if (el.id === 'lens-reset') { S.lens = { ...S.defaultLens }; await refreshAnalysis(); return; }
   if (d.cmp) { (el as HTMLInputElement).checked ? S.compare.add(d.cmp) : S.compare.delete(d.cmp); drawLibrary(); render(); return; }
   if (d.fly) {
     const s = S.library.find((x) => x.id === d.fly);
@@ -455,6 +487,7 @@ panel.addEventListener('click', async (e) => {
 
 panel.addEventListener('change', async (e) => {
   const el = e.target as HTMLInputElement;
+  if (S.busy) return;
   if (el.id === 'lib-file' && el.files?.[0]) {
     try {
       const add = importJSON(await el.files[0].text());
@@ -479,12 +512,17 @@ panel.addEventListener('input', (e) => {
   if (el.id === 'peer') {
     S.peer = el.value;
     clearTimeout((el as any)._t);
-    (el as any)._t = setTimeout(() => { const pos = el.selectionStart; render(); const n = document.getElementById('peer') as HTMLTextAreaElement; n.focus(); n.setSelectionRange(pos, pos); }, 500);
+    (el as any)._t = setTimeout(() => {
+      if (mode !== 'design') return;
+      const pos = el.selectionStart; render();
+      (document.getElementById('peer-filter') as HTMLDetailsElement).open = true;
+      const n = document.getElementById('peer') as HTMLTextAreaElement; n.focus(); n.setSelectionRange(pos, pos);
+    }, 500);
   }
 });
 
 function addSample() {
-  if (!S.sample || !S.meta) return;
+  if (!S.sample || !S.meta || !sameLens(S.sample.lens, S.lens)) return;
   const r = S.sample.results[S.addMinutes];
   const name = (document.getElementById('sample-name') as HTMLInputElement)?.value.trim() ?? '';
   const parts = splitMetrics(r.metrics);
@@ -511,23 +549,42 @@ function download(name: string, text: string) {
 }
 
 // 설계안 (designui.ts에서 렌더, 여기서 이벤트)
-async function loadDesign(file: File) {
+let designRequest = 0;
+async function loadDesign(file: File, fit = true) {
+  const request = ++designRequest;
   let fc: any;
-  try { fc = JSON.parse(await file.text()); } catch { S.design = { result: null, errors: ['GeoJSON을 읽을 수 없습니다 (JSON 형식 오류).'], name: file.name }; render(); return; }
-  S.design.name = file.name;
+  try { fc = JSON.parse(await file.text()); } catch { setDesignGeo(null); S.design = { result: null, errors: ['GeoJSON을 읽을 수 없습니다 (JSON 형식 오류).'], name: file.name }; render(); return; }
+  const lens = { ...S.lens };
+  S.design = { result: null, errors: [], name: file.name, source: fc, lens };
+  setDesignGeo(null);
   S.busy = '설계안 재계산 중';
   render();
   try {
-    const res = await rpc('design', { fc, lens: S.lens });
-    S.design = { result: res.errors?.length ? null : res, errors: res.errors ?? [], name: file.name };
+    const res = await rpc('design', { fc, lens });
+    if (request !== designRequest || !sameLens(lens, S.lens)) return;
+    S.design = { result: res.errors?.length ? null : res, errors: res.errors ?? [], name: file.name, source: fc, lens };
     if (!res.errors?.length) {
       setDesignGeo(res.geo);
       const b = res.bounds;
-      if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60 });
+      if (b && fit) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60 });
     }
-  } catch (err) { S.design = { result: null, errors: [String((err as Error).message)], name: file.name }; }
+  } catch (err) { if (request !== designRequest) return; S.design = { result: null, errors: [String((err as Error).message)], name: file.name }; }
   S.busy = '';
   render();
+}
+
+async function refreshAnalysis() {
+  const source = S.design.source;
+  const name = S.design.name;
+  try {
+    await refreshChoropleth();
+    if (S.sample) await takeSample(...S.sample.point, false);
+    if (source) await loadDesign(new File([JSON.stringify(source)], name), false);
+  } catch (err) {
+    S.busy = '';
+    alertLine(`재계산 실패: ${(err as Error).message}`);
+    render();
+  }
 }
 
 async function handleDesignClick(el: HTMLElement) {
@@ -536,7 +593,7 @@ async function handleDesignClick(el: HTMLElement) {
     const r = await fetch(`${BASE}data/regions/${S.region}/design_example.geojson`);
     if (r.ok) await loadDesign(new File([await r.text()], 'design_example.geojson'));
   }
-  if (el.id === 'design-clear') { S.design = { result: null, errors: [], name: '' }; setDesignGeo(null); render(); }
+  if (el.id === 'design-clear') { ++designRequest; S.design = { result: null, errors: [], name: '' }; setDesignGeo(null); render(); }
   if (el.dataset.ptype) { S.personality.targetType = el.dataset.ptype; render(); }
 }
 

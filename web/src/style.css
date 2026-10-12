@@ -129,3 +129,18 @@ input[type='file'] { display: none; }
 .modes { display: flex; gap: 16px; margin: 8px 0 4px; font-size: 15px; }
 .modes button.link[aria-pressed='true'] { font-weight: 700; }
 .footer summary { cursor: pointer; }
+
+/* The abstract experiment owns the question screen; geographic maps belong to city/design. */
+#map { min-width: 0; }
+#panel { flex-shrink: 0; }
+body[data-mode='question'] #map { display: none; }
+body[data-mode='question'] #panel {
+  width: 100%; height: 100%; border-left: 0; border-top: 0;
+  padding: 24px max(16px, calc((100vw - 980px) / 2)) 40px;
+}
+body[data-mode='question'] .lab-grid { grid-template-columns: minmax(80px, 1fr) repeat(4, minmax(0, 1fr)); gap: 12px; }
+body[data-mode='question'] .lab-grid figure, body[data-mode='question'] .lab-label { font-size: 14px; }
+@media (max-width: 760px) {
+  body[data-mode='question'] .lab-grid { grid-template-columns: 68px repeat(4, minmax(0, 1fr)); gap: 5px; }
+  body[data-mode='question'] .lab-grid figure, body[data-mode='question'] .lab-label { font-size: 12px; }
+}

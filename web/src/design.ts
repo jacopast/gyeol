@@ -1,7 +1,14 @@
 // 설계안 업로드 (SPEC 9.6, M6): 검증 → 대상지 안을 설계안으로 교체 → 대상지+버퍼 재계산 → 전후 비교
 import { cellToBoundary, cellToLatLng, latLngToCell } from 'h3-js';
-import { accessColumns, cloneCells, maxReach, type SpaceRec, spaceCellDist } from './access';
-import { aggregate, type Cells, edgeKey, type Lens, type Meta, type Metrics, type Network, type NetMod } from './engine';
+import { accessColumns, cloneCells, type SpaceRec, spaceCellDist } from './access';
+import { aggregate, type Cells, edgeKey, type Lens, type Meta, type Metrics, type Network, type NetMod, walkshedCells } from './engine';
+
+export interface DesignWalkshed {
+  before: Metrics;
+  after: Metrics;
+  beforeCells: number[];
+  afterCells: number[];
+}
 
 export interface DesignResult {
   errors: string[];
@@ -14,6 +21,7 @@ export interface DesignResult {
   bufferCells?: number;
   geo?: any;
   bounds?: number[];
+  comparison?: { point: [number, number]; results: Record<number, DesignWalkshed> };
 }
 
 const LAYERS: Record<string, string[]> = {
@@ -318,17 +326,30 @@ export function designRecompute(S: WS, fc: any, lens: Lens): DesignResult {
   const siteR = Math.hypot(x1 - x0, y1 - y0) / 2;
   const affected: number[] = [];
   const node = col(S.cells, 'node');
+  // Same protocol as city samples: one existing network node, 5/10 minute walksheds.
+  // Keep the start fixed while allowing ped_link/barrier to change reachable cells.
+  const start = net.nearest(L.lon0, L.lat0);
+  const catchments = (prm.walk.sample_minutes as number[]).map((minutes) => ({
+    minutes,
+    beforeCells: walkshedCells(net, node, start, minutes, prm.walk.speed_mps),
+    afterCells: walkshedCells(net, node, start, minutes, prm.walk.speed_mps, mod),
+  }));
   for (let i = 0; i < S.cells.n; i++) {
     if (node[i] < 0) continue;
     const [la, lo] = cellToLatLng(cellsH3[i]);
     const [x, y] = L.xy(lo, la);
     if (Math.hypot(x, y) <= siteR + buf) affected.push(i);
   }
+  const bufferIdx = [...affected];
+  const recalcCells = new Set(affected);
+  for (const c of catchments) for (const i of [...c.beforeCells, ...c.afterCells]) recalcCells.add(i);
+  affected.splice(0, affected.length, ...recalcCells);
   const extra = Math.max(...prm.access.cover_minutes) * 60 * prm.walk.speed_mps;
-  const relevant = (sp: SpaceRec) => { const [x, y] = L.xy(sp.pt[0], sp.pt[1]); return Math.hypot(x, y) <= maxReach(sp.area_m2, prm.access, extra) + siteR + buf; };
   const before = cloneCells(S.cells);
   const recompute = (spaces: SpaceRec[], cells: Cells, m?: NetMod) => {
-    const sp = spaces.filter(relevant);
+    // A long park can have a distant representative point but nearby entrances.
+    // Include every regional space, as the Python reference does; Dijkstra limits reach.
+    const sp = spaces;
     const dists = sp.map((s) => spaceCellDist(net, s, node, prm.access, extra, m));
     const cols = accessColumns(affected, sp, dists, col(cells, 'pop_night'), col(cells, 'pop_day'), S.meta);
     for (const [k, v] of cols) { const c = col(cells, k); affected.forEach((ci, t) => { c[ci] = v[t]; }); }
@@ -339,7 +360,17 @@ export function designRecompute(S: WS, fc: any, lens: Lens): DesignResult {
   const siteIdx = [...site.keys()];
   const fr = byLayer('frontage').map((f) => ({ f, len: lines(f.geometry, L).reduce((s, l) => s + lineLen(l), 0) }));
   const frontage = fr.length ? fr.reduce((s, x) => s + x.f.properties.doors_per_100m * x.len, 0) / fr.reduce((s, x) => s + x.len, 0) : null;
-  const agg = (c: Cells, idx: number[]) => aggregate(idx, c, S.poiRows, lens, S.meta);
+  // Observed health labels are not design outcomes (SPEC 8.3).
+  const agg = (c: Cells, idx: number[]): Metrics => Object.fromEntries(
+    Object.entries(aggregate(idx, c, S.poiRows, lens, S.meta)).filter(([k]) => !k.startsWith('places_')),
+  );
+  const comparison = {
+    point: [net.lon[start], net.lat[start]] as [number, number],
+    results: Object.fromEntries(catchments.map((c) => [c.minutes, {
+      beforeCells: c.beforeCells, afterCells: c.afterCells,
+      before: agg(before, c.beforeCells), after: agg(after, c.afterCells),
+    }])),
+  };
   const a1 = agg(after, siteIdx);
   a1.frontage_permeability = frontage;
   const geo = {
@@ -352,8 +383,8 @@ export function designRecompute(S: WS, fc: any, lens: Lens): DesignResult {
   if (mod.blocked.size) warnings.push(`barrier가 보행 링크 ${mod.blocked.size}개를 끊었습니다.`);
   if (added.length < osFeats.length) warnings.push(`최소 면적(${os.min_area_m2} m²)보다 작은 open_space ${osFeats.length - added.length}개는 공간으로 세지 않았습니다.`);
   return {
-    errors: [], warnings, before: agg(before, siteIdx), after: a1, beforeBuffer: agg(before, affected), afterBuffer: agg(after, affected),
-    siteCells: siteIdx.length, bufferCells: affected.length, geo, bounds: [bw, bs, be, bn],
+    errors: [], warnings, before: agg(before, siteIdx), after: a1, beforeBuffer: agg(before, bufferIdx), afterBuffer: agg(after, bufferIdx),
+    siteCells: siteIdx.length, bufferCells: bufferIdx.length, geo, bounds: [bw, bs, be, bn], comparison,
   };
 }
 

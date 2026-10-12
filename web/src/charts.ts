@@ -18,9 +18,9 @@ export function stripChart(def: MetricDef, pts: { v: number | null; name: string
   if (!all.length) {
     return `<div class="strip"><div class="lbl"><span>${esc(def.label)}</span><span class="muted">데이터 없음</span></div></div>`;
   }
-  let lo = Math.min(...all), hi = Math.max(...all);
-  if (lo === hi) { lo -= Math.abs(lo) * 0.05 || 1; hi += Math.abs(hi) * 0.05 || 1; }
-  const x = (v: number) => 4 + ((v - lo) / (hi - lo)) * 92;
+  const lo = Math.min(...all), hi = Math.max(...all);
+  // Equal values have no observed spread; do not invent endpoints such as 105% coverage.
+  const x = (v: number) => lo === hi ? 50 : 4 + ((v - lo) / (hi - lo)) * 92;
   const dots = pts.filter((p) => typeof p.v === 'number' && Number.isFinite(p.v))
     .map((p) => `<circle cx="${x(p.v as number)}%" cy="13" r="3.2" fill="var(--fg)" fill-opacity="0.45"><title>${esc(p.name)}: ${fmtValue(def, p.v, u)}</title></circle>`).join('');
   const line = target !== null && Number.isFinite(target)
