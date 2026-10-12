@@ -125,3 +125,7 @@ input[type='file'] { display: none; }
 .lab-grid .top { font-weight: 700; color: var(--fg); }
 .lab-cell:not(.top) { color: var(--muted); }
 .bar { height: 6px; background: var(--fg); opacity: 0.55; margin-top: 2px; }
+
+.modes { display: flex; gap: 16px; margin: 8px 0 4px; font-size: 15px; }
+.modes button.link[aria-pressed='true'] { font-weight: 700; }
+.footer summary { cursor: pointer; }

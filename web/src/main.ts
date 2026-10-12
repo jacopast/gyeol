@@ -208,6 +208,7 @@ function outline(cells: number[]) {
 
 async function takeSample(lon: number, lat: number) {
   if (!S.meta) return;
+  if (mode !== 'city') setMode('city');
   S.busy = '권역 계산 중';
   render();
   const r = await rpc('sample', { lon, lat, lens: S.lens, minutes: S.meta.params.walk.sample_minutes });
@@ -252,26 +253,54 @@ const KIND: Record<string, string> = { park: '공원', plaza: '광장', playgrou
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const lensIsDefault = () => JSON.stringify(S.lens) === JSON.stringify(S.defaultLens);
 
+type Mode = 'question' | 'city' | 'design';
+const MODES: [Mode, string, string][] = [
+  ['question', '질문', '같은 면적의 공원을 <b>한 곳에 모을까, 여러 곳에 흩을까?</b> 가상의 도시에서 배치만 바꿔 비교합니다. 아래 두 질문에 어떻게 답하느냐에 따라 결과가 뒤집힙니다 — 그 뒤집히는 지점을 보는 화면입니다.'],
+  ['city', '도시 읽기', '실제 도시에서 공원이 어디 있고 걸어서 얼마나 걸리는지 봅니다. <b>지도를 누르면</b> 그 자리에서 가장 가까운 공원과 큰 공원까지의 시간이 나옵니다. 눈여겨볼 곳은 라이브러리에 담아 두면 설계 검토에서 비교할 수 있습니다.'],
+  ['design', '설계 검토', '<b>설계안</b>(GeoJSON)을 올려 기존 상태와 비교하고, 라이브러리에 모은 동네들 사이에서 어디쯤인지 봅니다. 숫자는 처방이 아니라 위치입니다.'],
+];
+let mode: Mode = (() => {
+  const h = location.hash.slice(1) as Mode;
+  if (MODES.some(([m]) => m === h)) return h;
+  try { const v = localStorage.getItem('gyeol.mode') as Mode | null; if (v && MODES.some(([m]) => m === v)) return v; } catch { /* 저장소 없음 */ }
+  return 'question';
+})();
+
 export function render() {
   const m = S.meta;
   const h: string[] = [];
-  h.push(`<section><h1>결</h1>
-    <p class="small">${esc(S.regions.find((r) => r.id === S.region)?.name ?? '')}${S.regions.length > 1 ? ' · ' + S.regions.filter((r) => r.id !== S.region).map((r) => `<a href="?r=${r.id}">${esc(r.name)}</a>`).join(' · ') : ''}</p>
-    <p class="lead">초록은 누구나 들어갈 수 있는 공원·광장, 옅은 띠는 보도입니다. 바탕 육각형이 진할수록 공원까지 더 멉니다.</p>
-    <p class="small">지도를 눌러 보세요 — 그 자리에서 걸어서 가장 가까운 공원과 큰 공원까지 몇 분인지 알려 줍니다. 아래 '실험'에서는 같은 면적의 공원을 크게 모을 때와 작게 흩을 때를 비교합니다. 어느 쪽이 좋다고 판단하지는 않습니다.</p>
+  const desc = MODES.find(([k]) => k === mode)![2];
+  h.push(`<section><h1>결 <span class="muted" style="font-weight:400">· 공원과 공공공간의 배치</span></h1>
+    <nav class="modes">${MODES.map(([k, label]) => `<button class="link" data-mode="${k}" aria-pressed="${k === mode}">${label}</button>`).join('')}</nav>
+    <p class="small">${desc}</p>
     ${S.busy ? `<p class="small">${S.busy}…</p>` : ''}${S.notice ? `<p class="small">${esc(S.notice)}</p>` : ''}</section>`);
   if (m) {
-    h.push(renderSampleSection());
-    h.push(renderMapSection());
-    if (S.lab.data) h.push(renderLab(S.lab));
-    h.push(renderLibrarySection());
-    h.push(renderCompareSection());
-    h.push(renderDesign(S));
-    h.push(renderPersonality({ personality: S.personality, units: S.units, current: currentTarget() }));
+    if (mode === 'question') {
+      if (S.lab.data) h.push(renderLab(S.lab));
+      h.push(`<section><p class="small">가상의 도시에서 본 것을 실제 도시에서 확인하려면 → <button class="link" data-mode="city">도시 읽기</button></p></section>`);
+    } else if (mode === 'city') {
+      h.push(`<section><p class="lead">초록 = 누구나 들어갈 수 있는 공원·광장 · 옅은 띠 = 보도 · 육각형이 진할수록 공원까지 멂</p>
+        <p class="small">${esc(S.regions.find((r) => r.id === S.region)?.name ?? '')}${S.regions.length > 1 ? ' · 다른 도시: ' + S.regions.filter((r) => r.id !== S.region).map((r) => `<a href="?r=${r.id}#city">${esc(r.name)}</a>`).join(' · ') : ''}</p></section>`);
+      h.push(renderSampleSection());
+      h.push(renderMapSection());
+    } else {
+      h.push(renderDesign(S));
+      h.push(renderLibrarySection());
+      h.push(renderCompareSection());
+      h.push(renderPersonality({ personality: S.personality, units: S.units, current: currentTarget() }));
+    }
     h.push(renderFooter());
   }
   panel.innerHTML = h.join('');
-  if (S.lab.data) paintLab(panel, S.lab, readTokens());
+  if (S.lab.data && mode === 'question') paintLab(panel, S.lab, readTokens());
+}
+
+function setMode(next: Mode) {
+  mode = next;
+  try { localStorage.setItem('gyeol.mode', next); } catch { /* 저장소 없음 */ }
+  history.replaceState(null, '', `${location.pathname}${location.search}#${next}`);
+  panel.scrollTop = 0;
+  render();
 }
 
 function renderMapSection(): string {
@@ -324,7 +353,8 @@ function renderSampleSection(): string {
     <tr><td>다중 스케일 결 (${S.meta!.params.raster.multiscale_m.join('/')} m, ${mins[mins.length - 1]}분)</td><td colspan="${mins.length}">${ms ? ms.map((x) => x.toFixed(2)).join(' / ') : '데이터 없음'}</td></tr></table></details>
     <p style="margin-top:8px"><input type="text" id="sample-name" placeholder="이름 (선택)"></p>
     <p class="row"><span>${mins.map((mm) => `<button class="link" data-addmin="${mm}" aria-pressed="${mm === S.addMinutes}">${mm}분</button>`).join(' · ')}</span>
-    <button class="link" id="add-sample">라이브러리에 추가</button></p></section>`;
+    <button class="link" id="add-sample">라이브러리에 추가</button></p>
+    <p class="small">담은 곳은 <button class="link" data-mode="design">설계 검토</button>에서 비교합니다.</p></section>`;
 }
 
 function renderLibrarySection(): string {
@@ -333,7 +363,7 @@ function renderLibrarySection(): string {
   const demo = lib.filter((s) => s.demo);
   const row = (s: Sample) => `<div class="lib-row"><input type="checkbox" data-cmp="${s.id}" ${S.compare.has(s.id) ? 'checked' : ''} aria-label="비교">
     <button class="link" data-fly="${s.id}" style="text-align:left">${esc(s.name || s.id)}</button>
-    <span class="small">${s.walk_minutes}분 · ${s.created.slice(0, 10)}${s.params_hash !== S.meta!.params_hash ? ' · 다른 파라미터' : ''}</span></div>`;
+    <span class="small">${s.walk_minutes}분 · ${s.created.slice(0, 10)}${s.params_hash !== S.meta!.params_hash ? ' · 예전 설정으로 계산' : ''}</span></div>`;
   return `<section><h2>라이브러리</h2>
     ${own.length ? own.map(row).join('') : '<p class="small">아직 표본이 없습니다.</p>'}
     ${demo.length ? `<div class="group">시연 표본 ${demo.length}개 (맥락별 층화 추출) · <button class="link" id="cmp-demo">모두 비교에 넣기</button> · <button class="link" id="cmp-none">비교 비우기</button></div>
@@ -369,8 +399,8 @@ function renderCompareSection(): string {
     }).join('')
     : '';
   return `<section><h2>비교</h2>
-    <p class="small">점 = 비교에 넣은 라이브러리 표본, 선 = ${tgt ? esc(tgt.name) : '현재 대상 없음'}. 단일 종합 점수는 없습니다.</p>
-    <p class="small">동류 집단 필터 (줄마다 <code>ctx_density 100 400</code>)</p>
+    <p class="small">점 = 라이브러리에서 체크한 동네들, 굵은 선 = ${tgt ? esc(tgt.name) : '현재 대상(도시 읽기에서 누른 곳 또는 설계안) 없음'}. 지표마다 따로 보여 주고 합친 점수는 만들지 않습니다.</p>
+    <p class="small">비슷한 동네끼리만 비교하기 — 줄마다 <code>지표 최소 최대</code>. 예: <code>ctx_density 100 400</code> = 인구 밀도 100~400 인/ha인 표본만</p>
     <textarea id="peer" rows="2">${esc(S.peer)}</textarea>
     <p class="small">${rules.length ? `필터 ${rules.length}개 · ` : ''}비교 표본 ${set.length}개</p>${warn}${charts}</section>`;
 }
@@ -379,7 +409,7 @@ function renderFooter(): string {
   const m = S.meta!;
   const a = m.params.access;
   const opt = (key: keyof Lens, vals: (string | number)[]) => vals.map((v) => `<button class="link" data-lens="${key}" data-val="${v}" aria-pressed="${S.lens[key] === v}">${v}</button>`).join(' ');
-  return `<section class="footer">
+  return `<section class="footer"><details${lensIsDefault() ? '' : ' open'}><summary>설정 · 실행 정보</summary>
     <p>${lensIsDefault() ? '' : '<span class="temp">임시 실행 — 기본 렌즈와 다릅니다 · <button class="link" id="lens-reset">기본으로</button></span><br>'}
     실행 ${m.run_id} · params_hash <code>${m.params_hash}</code></p>
     <p>공간 정의 ${opt('definition', m.params.open_space.definitions)}</p>
@@ -387,7 +417,7 @@ function renderFooter(): string {
     <p>보행 ${m.params.walk.speed_mps} m/s · 서비스권 r0 ${a.r0_m} m · 셀 H3 ${10} · 래스터 ${m.params.raster.resolution_m} m</p>
     <p>폭 단위 <button class="link" data-unit="ft" aria-pressed="${S.units.width === 'ft'}">ft</button> <button class="link" data-unit="m" aria-pressed="${S.units.width === 'm'}">m</button></p>
     ${m.missing_layers.length ? `<p>데이터 없음: ${m.missing_layers.join(', ')}</p>` : ''}
-    <p><a href="https://github.com/jacopast/gyeol" target="_blank" rel="noopener">지표 정의·출처·한계 (GitHub)</a></p></section>`;
+    <p><a href="https://github.com/jacopast/gyeol" target="_blank" rel="noopener">지표 정의·출처·한계 (GitHub)</a></p></details></section>`;
 }
 
 // ---------------------------------------------------------------- 이벤트
@@ -395,6 +425,7 @@ panel.addEventListener('click', async (e) => {
   const el = (e.target as HTMLElement).closest('button, input[type=checkbox]') as HTMLElement | null;
   if (!el) return;
   const d = el.dataset;
+  if (d.mode) { setMode(d.mode as Mode); return; }
   if (d.metric) { S.metric = d.metric; await refreshChoropleth(); return; }
   if (d.lab) { (S.lab as any)[d.lab] = d.lab === 'alpha' || d.lab === 'beta' ? Number(d.val) : d.val === 'true'; render(); return; }
   if (d.addmin) { S.addMinutes = Number(d.addmin); render(); return; }

@@ -21,8 +21,7 @@ function diff(a: unknown, b: unknown): string {
 export function renderDesign(s: { design: DesignState; units: Units; meta: any }): string {
   const d = s.design;
   const head = `<section><h2>설계안</h2>
-    <p class="small">GeoJSON 하나(9.6 스키마)를 올리면 경계 안을 설계안으로 바꾸고, 대상지와 주변 ${s.meta?.params?.region?.boundary_buffer_m ?? ''} m를 다시 계산합니다.
-    설계안은 실선이 아니라 점선으로 그립니다.</p>
+    <p class="small">설계안 GeoJSON 파일 하나를 올리면 경계 안을 설계안으로 바꿔 대상지와 주변 ${s.meta?.params?.region?.boundary_buffer_m ?? ''} m를 다시 계산하고, 기존과 나란히 보여 줍니다. 처음이면 '예제 설계안'을 눌러 보세요. 지도에는 점선으로 그립니다.</p>
     <p class="small"><button class="link" id="design-upload">올리기</button> · <button class="link" id="design-example">예제 설계안</button>${d.result || d.errors.length ? ' · <button class="link" id="design-clear">지우기</button>' : ''}
     · <a href="https://github.com/jacopast/gyeol/tree/main/templates" target="_blank" rel="noopener">템플릿·작성법</a>
     <input type="file" id="design-file" accept=".geojson,.json,application/geo+json,application/json"></p>`;
