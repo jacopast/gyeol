@@ -82,3 +82,12 @@ npm --prefix web run dev -- --host 127.0.0.1
 - 브라우저 console error 없음. 성동구 새 설계 예제와 현장 데이터는 이번 검수 범위 밖이다.
 - 질문 화면 증거는 로컬 `tmp/qa-2026-10-12/question.jpg`에 있다(Git 제외). 파일이 없더라도 위 재현 순서로 다시 확인할 수 있다.
 - 공개 배포 상태는 GitHub Actions의 해당 코드 커밋 배포 결과로 확인한다. 로컬 검증과 사용자 시각 승인은 별도이며, 사용자 최종 시각 승인은 아직 받지 않았다.
+
+
+## 원격 반영·배포 검증 (2026-10-13)
+
+- 구현 커밋 `fc9642a777d2ff97bde7f414deaef90407f72ef3`을 원격 `main`과 `codex/comparison-consistency`에 반영했다.
+- [GitHub Actions 실행 38394251844](https://github.com/jacopast/gyeol/actions/runs/38394251844)의 테스트·빌드·Pages 배포가 모두 성공했다. [공개 사이트](https://jacopast.github.io/gyeol/)의 HTML 응답과 JS·CSS 파일명이 로컬 검증 빌드와 일치했다(`index-CI8Ykdqz.js`, `index-BN6RXHFj.css`).
+- 같은 구현을 다시 검사해 Python 24개·웹 71개, Ruff, TypeScript·Vite 빌드, `git diff --check`를 통과했다.
+- 공개 사이트 브라우저에서 맨해튼 예제 설계안 계산(공공 면적 14%→15%, 보도 폭 12.0→13.4 ft), 지도 출발점·전후 보행권 표시, 시연 비교 36개 → 5분에서 0개/조건이 다른 표본 36개 제외 → 10분 복귀 시 36개·유형 거리 복원을 확인했다. 검사 중 console error 없음. 예제의 기존 ped_link 연결 경고는 계속 표시한다.
+- 이번 배포 후 확인은 위 동작에 한한다. 설정 변경·모바일·테마 전체 회귀는 이전 로컬 검증 기록과 구별하며, 실증 타당성·현장 확인·사용자 최종 시각 승인은 미완료다.
